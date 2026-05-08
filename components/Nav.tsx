@@ -183,21 +183,22 @@ export default function Nav({ onDemo }: { onDemo: () => void }) {
             )}
           </nav>
 
-          {/* Right */}
+          {/* Right — logged-in state */}
           <div className="hidden md:flex items-center gap-3">
             <ThemeToggle />
+            {/* User chip */}
+            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                JD
+              </div>
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Jordan Davis</span>
+            </div>
             <Link
               href="/dashboard"
-              className="text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-white rounded-lg shadow-sm hover:shadow-amber-400/30 transition-all"
             >
-              Sign in
+              Go to Dashboard
             </Link>
-            <button
-              onClick={onDemo}
-              className="px-4 py-2 text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-white rounded-lg shadow-sm hover:shadow-amber-400/30 transition-all"
-            >
-              Request demo
-            </button>
           </div>
 
           {/* Mobile hamburger */}
@@ -260,16 +261,10 @@ export default function Nav({ onDemo }: { onDemo: () => void }) {
           <Link
             href="/dashboard"
             onClick={() => setOpen(false)}
-            className="mt-3 block w-full text-center px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-all"
+            className="mt-3 flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-white rounded-lg transition-all"
           >
-            Sign in
+            Go to Dashboard
           </Link>
-          <button
-            onClick={() => { setOpen(false); onDemo(); }}
-            className="mt-2 w-full px-4 py-2 text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-white rounded-lg transition-all"
-          >
-            Request demo
-          </button>
         </div>
       )}
     </header>

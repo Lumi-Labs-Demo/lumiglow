@@ -29,7 +29,7 @@ export default function HomePage() {
       <Nav onDemo={() => setDemoModal(true)} />
 
       <main>
-        <Hero onDemo={() => setDemoModal(true)} onPreview={scrollToPreview} />
+        <Hero onPreview={scrollToPreview} />
 
         <div ref={previewRef}>
           <ConsolePreview />

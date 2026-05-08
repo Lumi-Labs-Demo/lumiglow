@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { ArrowRight, Play, ShieldCheck, Zap, Activity } from "lucide-react";
 
 const stats = [
@@ -7,7 +8,7 @@ const stats = [
   { icon: Zap, label: "Control latency",             value: "< 200 ms" },
 ];
 
-export default function Hero({ onDemo, onPreview }: { onDemo: () => void; onPreview: () => void }) {
+export default function Hero({ onPreview }: { onPreview: () => void }) {
   return (
     <section className="relative overflow-hidden pt-32 pb-24 sm:pt-40 sm:pb-32">
       {/* Background */}
@@ -38,13 +39,13 @@ export default function Hero({ onDemo, onPreview }: { onDemo: () => void; onPrev
 
         {/* CTAs */}
         <div className="mt-10 flex flex-wrap items-center justify-center gap-4 animate-slide-up">
-          <button
-            onClick={onDemo}
+          <Link
+            href="/dashboard"
             className="group flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-400 text-white font-semibold rounded-xl shadow-lg shadow-amber-500/25 hover:shadow-amber-400/40 transition-all"
           >
-            Request demo
+            Go to Dashboard
             <ArrowRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
-          </button>
+          </Link>
           <button
             onClick={onPreview}
             className="group flex items-center gap-2 px-6 py-3 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-white font-semibold rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm transition-all"
