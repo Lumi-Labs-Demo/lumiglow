@@ -186,7 +186,7 @@ export default function Nav({ onDemo }: { onDemo: () => void }) {
           <div className="hidden md:flex items-center gap-3">
             <ThemeToggle />
             <a
-              href="#"
+              href="/dashboard"
               className="text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
             >
               Sign in
@@ -256,9 +256,16 @@ export default function Nav({ onDemo }: { onDemo: () => void }) {
             ))}
           </div>
 
+          <a
+            href="/dashboard"
+            onClick={() => setOpen(false)}
+            className="mt-3 block w-full text-center px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-all"
+          >
+            Sign in
+          </a>
           <button
             onClick={() => { setOpen(false); onDemo(); }}
-            className="mt-3 w-full px-4 py-2 text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-white rounded-lg transition-all"
+            className="mt-2 w-full px-4 py-2 text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-white rounded-lg transition-all"
           >
             Request demo
           </button>
