@@ -10,6 +10,7 @@ import {
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import ThemeToggle from "@/components/ThemeToggle";
 import {
   buildings as initialBuildings,
   alerts as initialAlerts,
@@ -555,6 +556,9 @@ export default function DashboardPage() {
               className="bg-transparent text-xs text-slate-700 dark:text-slate-300 placeholder-slate-400 outline-none w-full"
             />
           </div>
+
+          {/* Theme toggle */}
+          <ThemeToggle />
 
           {/* Notification bell */}
           <button

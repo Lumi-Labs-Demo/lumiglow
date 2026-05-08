@@ -9,7 +9,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     setMounted(true);
     const saved = localStorage.getItem("lumiglow-theme");
-    if (saved === "dark" || (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+    // Default to dark mode unless the user explicitly chose light
+    if (saved !== "light") {
       document.documentElement.classList.add("dark");
     }
   }, []);
