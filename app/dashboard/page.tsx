@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import Link from "next/link";
 import {
   Zap, LayoutDashboard, Building2, Bell, Calendar,
   BarChart3, Settings, LogOut, ChevronRight, Sun, Moon,
@@ -508,9 +509,9 @@ export default function DashboardPage() {
               <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">Jordan Davis</p>
               <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">Facility Manager</p>
             </div>
-            <a href="/" aria-label="Sign out" className="text-slate-400 hover:text-red-500 transition-colors">
+            <Link href="/" aria-label="Sign out" className="text-slate-400 hover:text-red-500 transition-colors">
               <LogOut size={14} />
-            </a>
+            </Link>
           </div>
         </div>
       </aside>

@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { Menu, X, Zap, Check, Sparkles, ChevronDown } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 import { cn } from "@/lib/utils";
@@ -185,12 +186,12 @@ export default function Nav({ onDemo }: { onDemo: () => void }) {
           {/* Right */}
           <div className="hidden md:flex items-center gap-3">
             <ThemeToggle />
-            <a
+            <Link
               href="/dashboard"
               className="text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
             >
               Sign in
-            </a>
+            </Link>
             <button
               onClick={onDemo}
               className="px-4 py-2 text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-white rounded-lg shadow-sm hover:shadow-amber-400/30 transition-all"
@@ -256,13 +257,13 @@ export default function Nav({ onDemo }: { onDemo: () => void }) {
             ))}
           </div>
 
-          <a
+          <Link
             href="/dashboard"
             onClick={() => setOpen(false)}
             className="mt-3 block w-full text-center px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-all"
           >
             Sign in
-          </a>
+          </Link>
           <button
             onClick={() => { setOpen(false); onDemo(); }}
             className="mt-2 w-full px-4 py-2 text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-white rounded-lg transition-all"
