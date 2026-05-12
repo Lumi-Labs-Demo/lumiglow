@@ -6,7 +6,7 @@ import ThemeToggle from "./ThemeToggle";
 import { cn } from "@/lib/utils";
 import { pricingTiers } from "@/lib/mockData";
 
-const links = ["Product", "Security", "Pricing", "Customers", "Docs"];
+const links = ["Product", "Dev Mode", "Security", "Pricing", "Customers", "Docs"];
 
 export default function Nav({ onDemo }: { onDemo: () => void }) {
   const [open, setOpen] = useState(false);
@@ -55,7 +55,15 @@ export default function Nav({ onDemo }: { onDemo: () => void }) {
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-1">
             {links.map((l) =>
-              l === "Pricing" ? (
+              l === "Dev Mode" ? (
+                <a
+                  key={l}
+                  href="#devmode"
+                  className="px-3 py-2 text-sm font-medium text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 rounded-md hover:bg-violet-50 dark:hover:bg-violet-950/30 transition-colors"
+                >
+                  Dev Mode
+                </a>
+              ) : l === "Pricing" ? (
                 <div key={l} className="relative" ref={pricingRef}>
                   <button
                     onClick={() => setPricingOpen((v) => !v)}
