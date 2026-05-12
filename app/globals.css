@@ -4,6 +4,27 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
+/* ── Theme tokens ──────────────────────────────────────────── */
+:root {
+  --color-bg:          255 255 255;   /* white */
+  --color-bg-subtle:   248 250 252;   /* slate-50 */
+  --color-surface:     241 245 249;   /* slate-100 */
+  --color-border:      226 232 240;   /* slate-200 */
+  --color-text:         15  23  42;   /* slate-900 */
+  --color-text-muted:  100 116 139;   /* slate-500 */
+  --color-brand:       245 158  11;   /* amber-500 */
+}
+
+[data-theme="dark"] {
+  --color-bg:            2   6  23;   /* slate-950 */
+  --color-bg-subtle:    15  23  42;   /* slate-900 */
+  --color-surface:      30  41  59;   /* slate-800 */
+  --color-border:       30  41  59;   /* slate-800 */
+  --color-text:        241 245 249;   /* slate-100 */
+  --color-text-muted:  148 163 184;   /* slate-400 */
+  --color-brand:       251 191  36;   /* amber-400 */
+}
+
 @layer base {
   * {
     @apply border-border;
