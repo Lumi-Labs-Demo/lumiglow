@@ -8,6 +8,7 @@ import {
   AlertTriangle, Info, CheckCircle2, X, SlidersHorizontal,
   TrendingDown, Activity, Users, ShieldCheck, Search,
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
+  KeyRound, Globe, RefreshCw, Copy, Plus, Trash2, Lock, Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -273,7 +274,320 @@ const reports = [
 
 // ─── Settings Panel ───────────────────────────────────────────────────────────
 
+type SettingsSection = "profile" | "sso" | "scim";
+
+function CopyField({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div>
+      <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">{label}</label>
+      <div className="flex items-center gap-2">
+        <input readOnly value={value} className="flex-1 px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 focus:outline-none font-mono" />
+        <button
+          onClick={() => { navigator.clipboard?.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+          className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-amber-500 transition-colors"
+        >
+          {copied ? <CheckCircle2 size={14} className="text-green-500" /> : <Copy size={14} />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SSOPanel() {
+  const [ssoMode, setSsoMode] = useState<"disabled" | "optional" | "enforced">("optional");
+  const [idpMetaUrl, setIdpMetaUrl] = useState("https://acme.okta.com/app/exk9abc123/sso/saml/metadata");
+  const [domains, setDomains] = useState(["acme.com", "acme-corp.io"]);
+  const [newDomain, setNewDomain] = useState("");
+  const [certExpiry] = useState("2027-03-15");
+  const [testResult, setTestResult] = useState<null | "ok" | "fail">(null);
+  const [rotated, setRotated] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const SP_ENTITY = "https://app.lumiglow.io/saml/metadata";
+  const ACS_URL = "https://app.lumiglow.io/saml/acs";
+  const METADATA_URL = "https://app.lumiglow.io/saml/metadata.xml";
+
+  function testConnection() {
+    setTestResult(null);
+    setTimeout(() => setTestResult("ok"), 1200);
+  }
+  function rotateCert() { setRotated(true); setTimeout(() => setRotated(false), 2000); }
+  function save() { setSaved(true); setTimeout(() => setSaved(false), 2000); }
+  function addDomain() {
+    const d = newDomain.trim().toLowerCase();
+    if (d && !domains.includes(d)) { setDomains(prev => [...prev, d]); setNewDomain(""); }
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-4">
+          <Shield size={16} className="text-amber-500" />
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">SAML 2.0 Single Sign-On</h3>
+          <span className="ml-auto px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">Enterprise</span>
+        </div>
+
+        <div className="mb-5">
+          <label className="text-xs text-slate-500 dark:text-slate-400 mb-2 block">SSO Mode</label>
+          <div className="flex gap-2 flex-wrap">
+            {(["disabled", "optional", "enforced"] as const).map(m => (
+              <button
+                key={m}
+                onClick={() => setSsoMode(m)}
+                className={cn(
+                  "px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all capitalize",
+                  ssoMode === m
+                    ? m === "enforced"
+                      ? "bg-red-500 border-red-500 text-white"
+                      : "bg-amber-500 border-amber-500 text-white"
+                    : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-amber-400"
+                )}
+              >{m}</button>
+            ))}
+          </div>
+          {ssoMode === "enforced" && (
+            <p className="mt-2 text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+              <AlertTriangle size={11} /> All org members must authenticate via SSO. Break-glass admin login available.
+            </p>
+          )}
+          {ssoMode === "optional" && (
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Members can log in with SSO or email/password.</p>
+          )}
+        </div>
+
+        {ssoMode !== "disabled" && (
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">IdP Metadata URL</label>
+              <input
+                value={idpMetaUrl}
+                onChange={e => setIdpMetaUrl(e.target.value)}
+                placeholder="https://your-idp.com/metadata"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400 font-mono"
+              />
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Supports Okta, Azure AD, and any SAML 2.0-compliant IdP.</p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 pt-1">
+              <CopyField label="SP Entity ID" value={SP_ENTITY} />
+              <CopyField label="ACS (Assertion Consumer Service) URL" value={ACS_URL} />
+              <CopyField label="SP Metadata URL" value={METADATA_URL} />
+            </div>
+
+            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+              <div className="flex items-center gap-3">
+                <KeyRound size={15} className="text-amber-500" />
+                <div>
+                  <p className="text-xs font-medium text-slate-800 dark:text-slate-200">SP Signing Certificate</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">Expires {certExpiry} · RSA-SHA256</p>
+                </div>
+              </div>
+              <button onClick={rotateCert} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 hover:border-amber-400 text-slate-600 dark:text-slate-300 transition-colors">
+                <RefreshCw size={11} className={rotated ? "animate-spin text-amber-500" : ""} />
+                {rotated ? "Rotated!" : "Rotate"}
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button onClick={testConnection} className="px-4 py-2 text-xs font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors border border-slate-200 dark:border-slate-700">
+                Test SSO Connection
+              </button>
+              {testResult === "ok" && <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1"><CheckCircle2 size={13} /> Connection verified</span>}
+              {testResult === "fail" && <span className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1"><X size={13} /> Connection failed</span>}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {ssoMode !== "disabled" && (
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <Globe size={15} className="text-amber-500" />
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Verified Domains</h3>
+          </div>
+          <div className="space-y-2 mb-3">
+            {domains.map(d => (
+              <div key={d} className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 size={13} className="text-green-500" />
+                  <span className="text-sm font-mono text-slate-800 dark:text-slate-200">{d}</span>
+                </div>
+                <button onClick={() => setDomains(prev => prev.filter(x => x !== d))} className="text-slate-400 hover:text-red-500 transition-colors">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <input
+              value={newDomain}
+              onChange={e => setNewDomain(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && addDomain()}
+              placeholder="yourdomain.com"
+              className="flex-1 px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+            />
+            <button onClick={addDomain} className="px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-white transition-colors">
+              <Plus size={15} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      <button
+        onClick={save}
+        className={cn(
+          "px-6 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center gap-2",
+          saved ? "bg-green-500 text-white" : "bg-amber-500 hover:bg-amber-400 text-white shadow hover:shadow-amber-400/30"
+        )}
+      >
+        {saved ? <><CheckCircle2 size={15} /> Saved!</> : "Save SSO settings"}
+      </button>
+    </div>
+  );
+}
+
+function SCIMPanel() {
+  const [scimEnabled, setScimEnabled] = useState(true);
+  const [tokenVisible, setTokenVisible] = useState(false);
+  const [tokenRotated, setTokenRotated] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const SCIM_BASE = "https://app.lumiglow.io/scim/v2";
+  const SCIM_TOKEN = "scim_sk_acme_7f3a9b2d1e8c4f6a0b5e2d9c7f1a3b8e";
+
+  const provisionedUsers = [
+    { name: "Alex Chen",    email: "alex@acme.com",    role: "Admin",    source: "Okta", status: "active" },
+    { name: "Sam Rivera",   email: "sam@acme.com",     role: "Viewer",   source: "Okta", status: "active" },
+    { name: "Morgan Lee",   email: "morgan@acme.com",  role: "Manager",  source: "Okta", status: "active" },
+    { name: "Jamie Torres", email: "jamie@acme.com",   role: "Viewer",   source: "Okta", status: "suspended" },
+  ];
+
+  const roleMapping = [
+    { scimGroup: "LumiGlow-Admins",   lumiRole: "Admin" },
+    { scimGroup: "LumiGlow-Managers", lumiRole: "Facility Manager" },
+    { scimGroup: "LumiGlow-Viewers",  lumiRole: "Viewer" },
+  ];
+
+  function rotateToken() { setTokenRotated(true); setTimeout(() => setTokenRotated(false), 2000); }
+  function save() { setSaved(true); setTimeout(() => setSaved(false), 2000); }
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-4">
+          <Users size={16} className="text-amber-500" />
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">SCIM 2.0 Provisioning</h3>
+          <span className="ml-auto px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">Enterprise</span>
+        </div>
+
+        <div className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800 mb-4">
+          <div>
+            <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">Enable SCIM provisioning</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">Auto-create and deprovision users via your IdP</p>
+          </div>
+          <button onClick={() => setScimEnabled(!scimEnabled)} className={cn("transition-colors", scimEnabled ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>
+            {scimEnabled ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+          </button>
+        </div>
+
+        {scimEnabled && (
+          <div className="space-y-4">
+            <CopyField label="SCIM Base URL" value={SCIM_BASE} />
+
+            <div>
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Bearer Token</label>
+              <div className="flex items-center gap-2">
+                <input
+                  readOnly
+                  type={tokenVisible ? "text" : "password"}
+                  value={SCIM_TOKEN}
+                  className="flex-1 px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 focus:outline-none font-mono"
+                />
+                <button onClick={() => setTokenVisible(v => !v)} className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-amber-500 transition-colors">
+                  <Lock size={13} />
+                </button>
+                <button onClick={rotateToken} className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-amber-500 transition-colors">
+                  <RefreshCw size={13} className={tokenRotated ? "animate-spin text-amber-500" : ""} />
+                </button>
+              </div>
+              {tokenRotated && <p className="text-xs text-green-600 dark:text-green-400 mt-1">Token rotated — update your IdP configuration.</p>}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center">
+                <p className="text-xl font-bold text-slate-900 dark:text-white">3</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Active users</p>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center">
+                <p className="text-xl font-bold text-slate-900 dark:text-white">2</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Groups synced</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {scimEnabled && (
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <Users size={15} className="text-amber-500" />
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">SCIM-Provisioned Members</h3>
+          </div>
+          <div className="space-y-2">
+            {provisionedUsers.map(u => (
+              <div key={u.email} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                  {u.name.split(" ").map(n => n[0]).join("")}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{u.name}</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 truncate">{u.email}</p>
+                </div>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">{u.role}</span>
+                <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", u.status === "active" ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400")}>
+                  {u.status}
+                </span>
+                <span className="text-xs text-slate-400 dark:text-slate-500 hidden sm:block">{u.source}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {scimEnabled && (
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <ShieldCheck size={15} className="text-amber-500" />
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Group → Role Mapping</h3>
+          </div>
+          <div className="space-y-2">
+            {roleMapping.map(r => (
+              <div key={r.scimGroup} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <span className="text-xs font-mono text-slate-600 dark:text-slate-300 flex-1">{r.scimGroup}</span>
+                <ChevronRight size={13} className="text-slate-400" />
+                <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">{r.lumiRole}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-3">Group memberships are synced from your IdP. Changes take effect on next SCIM sync.</p>
+        </div>
+      )}
+
+      <button
+        onClick={save}
+        className={cn(
+          "px-6 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center gap-2",
+          saved ? "bg-green-500 text-white" : "bg-amber-500 hover:bg-amber-400 text-white shadow hover:shadow-amber-400/30"
+        )}
+      >
+        {saved ? <><CheckCircle2 size={15} /> Saved!</> : "Save SCIM settings"}
+      </button>
+    </div>
+  );
+}
+
 function SettingsPanel() {
+  const [section, setSection] = useState<SettingsSection>("profile");
   const [notifEmail, setNotifEmail] = useState(true);
   const [notifSlack, setNotifSlack] = useState(true);
   const [notifPager, setNotifPager] = useState(false);
@@ -287,97 +601,128 @@ function SettingsPanel() {
     setTimeout(() => setSaved(false), 2000);
   }
 
-  return (
-    <div className="max-w-2xl space-y-6">
-      {/* Profile */}
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-4">Profile</h3>
-        <div className="flex items-center gap-4 mb-5">
-          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-lg font-bold shadow">JD</div>
-          <div>
-            <p className="text-sm font-semibold text-slate-900 dark:text-white">Jordan Davis</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">jordan@acme.com · Facility Manager</p>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Full name</label>
-            <input defaultValue="Jordan Davis" className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400" />
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Email</label>
-            <input defaultValue="jordan@acme.com" className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400" />
-          </div>
-        </div>
-      </div>
+  const tabs: { id: SettingsSection; label: string; icon: React.ReactNode }[] = [
+    { id: "profile", label: "General",    icon: <Settings size={14} /> },
+    { id: "sso",     label: "SSO / SAML", icon: <Shield size={14} /> },
+    { id: "scim",    label: "SCIM",       icon: <Users size={14} /> },
+  ];
 
-      {/* Notifications */}
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-4">Notifications</h3>
-        {[
-          { label: "Email alerts",       sub: "Critical & warning events",    val: notifEmail, set: setNotifEmail },
-          { label: "Slack integration",  sub: "#facilities-alerts channel",   val: notifSlack, set: setNotifSlack },
-          { label: "PagerDuty",          sub: "Critical-only escalation",     val: notifPager, set: setNotifPager },
-        ].map(row => (
-          <div key={row.label} className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800 last:border-0">
-            <div>
-              <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{row.label}</p>
-              <p className="text-xs text-slate-400 dark:text-slate-500">{row.sub}</p>
-            </div>
-            <button onClick={() => row.set(!row.val)} className={cn("transition-colors", row.val ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>
-              {row.val ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
-            </button>
-          </div>
+  return (
+    <div className="max-w-2xl">
+      {/* Sub-nav */}
+      <div className="flex gap-1 mb-6 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 w-fit">
+        {tabs.map(t => (
+          <button
+            key={t.id}
+            onClick={() => setSection(t.id)}
+            className={cn(
+              "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+              section === t.id
+                ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"
+                : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+            )}
+          >
+            {t.icon}{t.label}
+          </button>
         ))}
       </div>
 
-      {/* Automation */}
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-4">Automation</h3>
-        <div className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800">
-          <div>
-            <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">Auto-apply schedule policies</p>
-            <p className="text-xs text-slate-400 dark:text-slate-500">System adjusts brightness automatically</p>
-          </div>
-          <button onClick={() => setAutoPolicy(!autoPolicy)} className={cn("transition-colors", autoPolicy ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>
-            {autoPolicy ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
-          </button>
-        </div>
-      </div>
+      {section === "sso" && <SSOPanel />}
+      {section === "scim" && <SCIMPanel />}
 
-      {/* Security */}
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-4">Security</h3>
-        <div className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800">
-          <div>
-            <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">Two-factor authentication</p>
-            <p className="text-xs text-slate-400 dark:text-slate-500">TOTP via authenticator app</p>
+      {section === "profile" && (
+        <div className="space-y-6">
+          {/* Profile */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-4">Profile</h3>
+            <div className="flex items-center gap-4 mb-5">
+              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-lg font-bold shadow">JD</div>
+              <div>
+                <p className="text-sm font-semibold text-slate-900 dark:text-white">Jordan Davis</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">jordan@acme.com · Facility Manager</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Full name</label>
+                <input defaultValue="Jordan Davis" className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Email</label>
+                <input defaultValue="jordan@acme.com" className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400" />
+              </div>
+            </div>
           </div>
-          <button onClick={() => setTwoFA(!twoFA)} className={cn("transition-colors", twoFA ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>
-            {twoFA ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
-          </button>
-        </div>
-        <div className="py-3">
-          <label className="text-sm text-slate-800 dark:text-slate-200 font-medium block mb-1">Session timeout (minutes)</label>
-          <select
-            value={sessionTimeout}
-            onChange={e => setSessionTimeout(e.target.value)}
-            className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+
+          {/* Notifications */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-4">Notifications</h3>
+            {[
+              { label: "Email alerts",       sub: "Critical & warning events",    val: notifEmail, set: setNotifEmail },
+              { label: "Slack integration",  sub: "#facilities-alerts channel",   val: notifSlack, set: setNotifSlack },
+              { label: "PagerDuty",          sub: "Critical-only escalation",     val: notifPager, set: setNotifPager },
+            ].map(row => (
+              <div key={row.label} className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800 last:border-0">
+                <div>
+                  <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{row.label}</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">{row.sub}</p>
+                </div>
+                <button onClick={() => row.set(!row.val)} className={cn("transition-colors", row.val ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>
+                  {row.val ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Automation */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-4">Automation</h3>
+            <div className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">Auto-apply schedule policies</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500">System adjusts brightness automatically</p>
+              </div>
+              <button onClick={() => setAutoPolicy(!autoPolicy)} className={cn("transition-colors", autoPolicy ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>
+                {autoPolicy ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+              </button>
+            </div>
+          </div>
+
+          {/* Security */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-4">Security</h3>
+            <div className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">Two-factor authentication</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500">TOTP via authenticator app</p>
+              </div>
+              <button onClick={() => setTwoFA(!twoFA)} className={cn("transition-colors", twoFA ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>
+                {twoFA ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+              </button>
+            </div>
+            <div className="py-3">
+              <label className="text-sm text-slate-800 dark:text-slate-200 font-medium block mb-1">Session timeout (minutes)</label>
+              <select
+                value={sessionTimeout}
+                onChange={e => setSessionTimeout(e.target.value)}
+                className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+              >
+                {["15", "30", "60", "120", "480"].map(v => <option key={v} value={v}>{v} min</option>)}
+              </select>
+            </div>
+          </div>
+
+          <button
+            onClick={save}
+            className={cn(
+              "px-6 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center gap-2",
+              saved ? "bg-green-500 text-white" : "bg-amber-500 hover:bg-amber-400 text-white shadow hover:shadow-amber-400/30"
+            )}
           >
-            {["15", "30", "60", "120", "480"].map(v => <option key={v} value={v}>{v} min</option>)}
-          </select>
+            {saved ? <><CheckCircle2 size={15} /> Saved!</> : "Save changes"}
+          </button>
         </div>
-      </div>
-
-      <button
-        onClick={save}
-        className={cn(
-          "px-6 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center gap-2",
-          saved ? "bg-green-500 text-white" : "bg-amber-500 hover:bg-amber-400 text-white shadow hover:shadow-amber-400/30"
-        )}
-      >
-        {saved ? <><CheckCircle2 size={15} /> Saved!</> : "Save changes"}
-      </button>
+      )}
     </div>
   );
 }
