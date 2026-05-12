@@ -8,6 +8,7 @@ import {
   AlertTriangle, Info, CheckCircle2, X, SlidersHorizontal,
   TrendingDown, Activity, Users, ShieldCheck, Search,
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
+  Wifi, WifiOff, Clock, RefreshCw, ServerCrash,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -15,9 +16,11 @@ import {
   buildings as initialBuildings,
   alerts as initialAlerts,
   energyData,
+  apiEndpoints as initialEndpoints,
   Building,
   Zone,
   Alert,
+  ApiEndpoint,
 } from "@/lib/mockData";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -271,6 +274,160 @@ const reports = [
   { id: "r5", name: "Firmware Inventory",     scope: "All buildings", generated: "Apr 25, 2025",  size: "34 KB"  },
 ];
 
+// ─── API Health Monitor ───────────────────────────────────────────────────────
+
+function ApiHealthMonitor({ endpoints, onRetry }: {
+  endpoints: ApiEndpoint[];
+  onRetry: (id: string) => void;
+}) {
+  const healthy = endpoints.filter(e => e.status === "healthy").length;
+  const degraded = endpoints.filter(e => e.status === "degraded").length;
+  const down = endpoints.filter(e => e.status === "down").length;
+
+  function statusColor(s: ApiEndpoint["status"]) {
+    if (s === "healthy")  return "text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15";
+    if (s === "degraded") return "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/15";
+    return "text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/15";
+  }
+  function statusDot(s: ApiEndpoint["status"]) {
+    if (s === "healthy")  return "bg-green-500";
+    if (s === "degraded") return "bg-amber-500 animate-pulse";
+    return "bg-red-500 animate-pulse";
+  }
+  function statusIcon(s: ApiEndpoint["status"]) {
+    if (s === "healthy")  return <Wifi size={13} />;
+    if (s === "degraded") return <Clock size={13} />;
+    return <WifiOff size={13} />;
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <ServerCrash size={15} className="text-red-500" />
+            API Health Monitor
+          </h2>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">504 timeout detection · live endpoint status</p>
+        </div>
+        <div className="flex items-center gap-2 text-xs">
+          {down > 0 && (
+            <span className="flex items-center gap-1 font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/15 px-2 py-0.5 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />{down} down
+            </span>
+          )}
+          {degraded > 0 && (
+            <span className="flex items-center gap-1 font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/15 px-2 py-0.5 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />{degraded} degraded
+            </span>
+          )}
+          <span className="flex items-center gap-1 font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2 py-0.5 rounded-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />{healthy} healthy
+          </span>
+        </div>
+      </div>
+
+      {/* 504 Banner */}
+      {(down > 0 || degraded > 0) && (
+        <div className="mb-4 flex items-start gap-3 p-3 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200/60 dark:border-red-500/20">
+          <AlertTriangle size={14} className="text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-red-700 dark:text-red-300">
+              504 Gateway Timeout detected on {down + degraded} endpoint{down + degraded > 1 ? "s" : ""}
+            </p>
+            <p className="text-[11px] text-red-500 dark:text-red-400 mt-0.5">
+              Timeout threshold: 5,000 ms · Auto-retry enabled · Incident LUMI-504
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Endpoint list */}
+      <div className="space-y-2">
+        {endpoints.map(ep => (
+          <div
+            key={ep.id}
+            className={cn(
+              "flex items-center gap-3 px-4 py-3 rounded-xl border transition-all",
+              ep.status === "healthy"  ? "bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700/50" :
+              ep.status === "degraded" ? "bg-amber-50 dark:bg-amber-500/5 border-amber-200/60 dark:border-amber-500/20" :
+              "bg-red-50 dark:bg-red-500/5 border-red-200/60 dark:border-red-500/20"
+            )}
+          >
+            {/* Dot */}
+            <span className={cn("w-2 h-2 rounded-full shrink-0", statusDot(ep.status))} />
+
+            {/* Name & path */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">{ep.name}</span>
+                <span className={cn("flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full", statusColor(ep.status))}>
+                  {statusIcon(ep.status)}
+                  {ep.status}
+                </span>
+              </div>
+              <p className="text-[11px] font-mono text-slate-400 dark:text-slate-500 mt-0.5">{ep.path}</p>
+              {ep.lastIncident && (
+                <p className="text-[10px] text-red-500 dark:text-red-400 mt-0.5 flex items-center gap-1">
+                  <AlertTriangle size={9} /> {ep.lastIncident}
+                </p>
+              )}
+            </div>
+
+            {/* Stats */}
+            <div className="hidden sm:flex items-center gap-4 shrink-0">
+              <div className="text-right">
+                <p className="text-[10px] text-slate-400 dark:text-slate-500">Response</p>
+                <p className={cn("text-xs font-bold tabular-nums",
+                  ep.status === "down" ? "text-red-500" :
+                  ep.responseMs > 500 ? "text-amber-500" : "text-slate-700 dark:text-slate-300"
+                )}>
+                  {ep.status === "down" ? "—" : `${ep.responseMs} ms`}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] text-slate-400 dark:text-slate-500">Error rate</p>
+                <p className={cn("text-xs font-bold tabular-nums",
+                  ep.errorRate > 5 ? "text-red-500" :
+                  ep.errorRate > 1 ? "text-amber-500" : "text-green-600 dark:text-green-400"
+                )}>
+                  {ep.errorRate.toFixed(1)}%
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] text-slate-400 dark:text-slate-500">Uptime 30d</p>
+                <p className={cn("text-xs font-bold tabular-nums",
+                  ep.uptime < 95 ? "text-red-500" :
+                  ep.uptime < 99 ? "text-amber-500" : "text-green-600 dark:text-green-400"
+                )}>
+                  {ep.uptime.toFixed(2)}%
+                </p>
+              </div>
+            </div>
+
+            {/* Retry button */}
+            {ep.status !== "healthy" && (
+              <button
+                onClick={() => onRetry(ep.id)}
+                className="shrink-0 flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-amber-400 hover:text-amber-600 transition-colors"
+              >
+                <RefreshCw size={10} /> Retry
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Footer note */}
+      <p className="mt-3 text-[11px] text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+        <CheckCircle2 size={11} className="text-green-500" />
+        Timeout threshold: 5,000 ms · Auto-retry: 3 attempts · Circuit breaker: enabled · Incident: LUMI-504
+      </p>
+    </div>
+  );
+}
+
 // ─── Settings Panel ───────────────────────────────────────────────────────────
 
 function SettingsPanel() {
@@ -280,6 +437,10 @@ function SettingsPanel() {
   const [autoPolicy, setAutoPolicy] = useState(true);
   const [twoFA, setTwoFA] = useState(true);
   const [sessionTimeout, setSessionTimeout] = useState("60");
+  const [timeoutMs, setTimeoutMs] = useState("5000");
+  const [retryAttempts, setRetryAttempts] = useState("3");
+  const [retryBackoff, setRetryBackoff] = useState("exponential");
+  const [circuitBreaker, setCircuitBreaker] = useState(true);
   const [saved, setSaved] = useState(false);
 
   function save() {
@@ -369,6 +530,66 @@ function SettingsPanel() {
         </div>
       </div>
 
+      {/* API Timeout & Retry */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-1 flex items-center gap-2">
+          <Clock size={14} className="text-amber-500" />
+          API Timeout &amp; Retry
+        </h3>
+        <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">Configure request timeout thresholds and automatic retry behaviour to prevent 504 errors.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Request timeout (ms)</label>
+            <select
+              value={timeoutMs}
+              onChange={e => setTimeoutMs(e.target.value)}
+              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+            >
+              {["1000","2000","3000","5000","10000","30000"].map(v => (
+                <option key={v} value={v}>{Number(v).toLocaleString()} ms{v === "5000" ? " (recommended)" : ""}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Max retry attempts</label>
+            <select
+              value={retryAttempts}
+              onChange={e => setRetryAttempts(e.target.value)}
+              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+            >
+              {["0","1","2","3","5"].map(v => (
+                <option key={v} value={v}>{v === "0" ? "No retries" : `${v} attempt${v !== "1" ? "s" : ""}`}{v === "3" ? " (recommended)" : ""}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Retry backoff strategy</label>
+            <select
+              value={retryBackoff}
+              onChange={e => setRetryBackoff(e.target.value)}
+              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+            >
+              <option value="exponential">Exponential (recommended)</option>
+              <option value="linear">Linear</option>
+              <option value="fixed">Fixed</option>
+            </select>
+          </div>
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">Circuit breaker</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">Auto-open after 5 consecutive 504s</p>
+            </div>
+            <button onClick={() => setCircuitBreaker(!circuitBreaker)} className={cn("shrink-0 transition-colors", circuitBreaker ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>
+              {circuitBreaker ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+            </button>
+          </div>
+        </div>
+        <div className="mt-3 flex items-center gap-2 text-[11px] text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10 px-3 py-2 rounded-lg">
+          <CheckCircle2 size={12} />
+          Fix deployed for LUMI-504 · Timeout handling active on all API endpoints
+        </div>
+      </div>
+
       <button
         onClick={save}
         className={cn(
@@ -389,6 +610,7 @@ export default function DashboardPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [buildings, setBuildings] = useState(initialBuildings);
   const [alertList, setAlertList] = useState(initialAlerts);
+  const [endpoints, setEndpoints] = useState(initialEndpoints);
   const [expandedBuildings, setExpandedBuildings] = useState<string[]>(["b1"]);
   const [searchQ, setSearchQ] = useState("");
   const [scheduleActive, setScheduleActive] = useState<Record<string, boolean>>(
@@ -427,6 +649,15 @@ export default function DashboardPage() {
 
   const dismissAlert = useCallback((id: string) => {
     setAlertList(prev => prev.filter(a => a.id !== id));
+  }, []);
+
+  const retryEndpoint = useCallback((id: string) => {
+    setEndpoints(prev => prev.map(ep =>
+      ep.id === id
+        ? { ...ep, status: "healthy" as const, responseMs: Math.round(40 + Math.random() * 80), errorRate: 0.1, lastIncident: null }
+        : ep
+    ));
+    setAlertList(prev => prev.filter(a => !(a.id === "a6" && id === "ep2" || a.id === "a6" && id === "ep5")));
   }, []);
 
   const toggleBuildingExpand = useCallback((id: string) => {
@@ -623,6 +854,9 @@ export default function DashboardPage() {
                 </div>
                 <EnergyChart />
               </div>
+
+              {/* API Health Monitor */}
+              <ApiHealthMonitor endpoints={endpoints} onRetry={retryEndpoint} />
 
               {/* Alerts preview & buildings summary */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
