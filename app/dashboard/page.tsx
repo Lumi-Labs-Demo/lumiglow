@@ -8,9 +8,11 @@ import {
   AlertTriangle, Info, CheckCircle2, X, SlidersHorizontal,
   TrendingDown, Activity, Users, ShieldCheck, Search,
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
+  Plug,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
+import SnowflakePanel from "@/components/SnowflakePanel";
 import {
   buildings as initialBuildings,
   alerts as initialAlerts,
@@ -22,7 +24,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings";
+type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "integrations" | "settings";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -445,8 +447,9 @@ export default function DashboardPage() {
     { id: "buildings", label: "Buildings", icon: <Building2 size={17} /> },
     { id: "alerts",    label: "Alerts",    icon: <Bell size={17} />, badge: alertList.filter(a => a.severity !== "info").length },
     { id: "schedules", label: "Schedules", icon: <Calendar size={17} /> },
-    { id: "reports",   label: "Reports",   icon: <BarChart3 size={17} /> },
-    { id: "settings",  label: "Settings",  icon: <Settings size={17} /> },
+    { id: "reports",      label: "Reports",      icon: <BarChart3 size={17} /> },
+    { id: "integrations", label: "Integrations", icon: <Plug size={17} /> },
+    { id: "settings",     label: "Settings",     icon: <Settings size={17} /> },
   ];
 
   const filteredZones = buildings
@@ -926,6 +929,9 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
+
+          {/* ── INTEGRATIONS ── */}
+          {tab === "integrations" && <SnowflakePanel />}
 
           {/* ── SETTINGS ── */}
           {tab === "settings" && <SettingsPanel />}
