@@ -8,6 +8,8 @@ import {
   AlertTriangle, Info, CheckCircle2, X, SlidersHorizontal,
   TrendingDown, Activity, Users, ShieldCheck, Search,
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
+  KeyRound, Link2, RefreshCw, Copy, Upload, ShieldAlert,
+  UserCheck, Globe, Lock, Unlock, ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -271,6 +273,17 @@ const reports = [
   { id: "r5", name: "Firmware Inventory",     scope: "All buildings", generated: "Apr 25, 2025",  size: "34 KB"  },
 ];
 
+// ─── SSO Audit Log data ───────────────────────────────────────────────────────
+
+const ssoAuditEvents = [
+  { id: "e1", time: "Today 09:14", user: "alice@acme.com",  event: "SSO login success",         idp: "Okta",     status: "success" },
+  { id: "e2", time: "Today 08:51", user: "bob@acme.com",    event: "SCIM user provisioned",     idp: "Azure AD", status: "success" },
+  { id: "e3", time: "Today 08:22", user: "carol@acme.com",  event: "SSO login success",         idp: "Okta",     status: "success" },
+  { id: "e4", time: "Yesterday",   user: "dan@acme.com",    event: "Expired cert rejected",     idp: "Okta",     status: "error"   },
+  { id: "e5", time: "Yesterday",   user: "eve@acme.com",    event: "SCIM group role mapped",    idp: "Azure AD", status: "success" },
+  { id: "e6", time: "May 10",      user: "frank@acme.com",  event: "SSO login – missing email", idp: "Okta",     status: "error"   },
+];
+
 // ─── Settings Panel ───────────────────────────────────────────────────────────
 
 function SettingsPanel() {
@@ -282,9 +295,70 @@ function SettingsPanel() {
   const [sessionTimeout, setSessionTimeout] = useState("60");
   const [saved, setSaved] = useState(false);
 
+  // SSO state
+  const [ssoEnabled, setSsoEnabled] = useState(true);
+  const [ssoMode, setSsoMode] = useState<"optional" | "enforced">("optional");
+  const [ssoIdp, setSsoIdp] = useState("okta");
+  const [emailDomain, setEmailDomain] = useState("acme.com");
+  const [idpMetadata, setIdpMetadata] = useState(
+    `<?xml version="1.0" encoding="UTF-8"?>\n<EntityDescriptor entityID="https://okta.acme.com/sso/saml" ...>\n  <!-- IdP metadata XML -->\n</EntityDescriptor>`
+  );
+  const [metaCopied, setMetaCopied] = useState(false);
+  const [breakGlass, setBreakGlass] = useState(false);
+  const [breakGlassTimer, setBreakGlassTimer] = useState<number | null>(null);
+
+  // SCIM state
+  const [scimEnabled, setScimEnabled] = useState(true);
+  const [scimToken, setScimToken] = useState("scim_tok_\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u20223f9a");
+  const [tokenRevealed, setTokenRevealed] = useState(false);
+  const [tokenCopied, setTokenCopied] = useState(false);
+  const [roleMappings, setRoleMappings] = useState([
+    { id: "rm1", group: "LumiGlow-Admins",  role: "Admin"  },
+    { id: "rm2", group: "LumiGlow-Members", role: "Member" },
+    { id: "rm3", group: "LumiGlow-Viewers", role: "Viewer" },
+  ]);
+  const [newGroup, setNewGroup] = useState("");
+  const [newRole, setNewRole] = useState("Member");
+
+  const SP_ENTITY_ID = "https://lumiglow.app/saml/metadata";
+  const ACS_URL      = "https://lumiglow.app/saml/acs";
+  const SCIM_URL     = "https://lumiglow.app/scim/v2";
+
   function save() {
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  }
+
+  function copyText(text: string, setter: (v: boolean) => void) {
+    navigator.clipboard?.writeText(text).catch(() => {});
+    setter(true);
+    setTimeout(() => setter(false), 1500);
+  }
+
+  function rotateToken() {
+    setScimToken("scim_tok_\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" + Math.random().toString(36).slice(2, 6));
+    setTokenRevealed(false);
+  }
+
+  function enableBreakGlass() {
+    setBreakGlass(true);
+    setBreakGlassTimer(30);
+    const iv = setInterval(() => {
+      setBreakGlassTimer(t => {
+        if (t === null || t <= 1) { clearInterval(iv); setBreakGlass(false); return null; }
+        return t - 1;
+      });
+    }, 1000);
+  }
+
+  function addRoleMapping() {
+    if (!newGroup.trim()) return;
+    setRoleMappings(prev => [...prev, { id: `rm${Date.now()}`, group: newGroup.trim(), role: newRole }]);
+    setNewGroup("");
+  }
+
+  function removeRoleMapping(id: string) {
+    setRoleMappings(prev => prev.filter(r => r.id !== id));
   }
 
   return (
@@ -367,6 +441,334 @@ function SettingsPanel() {
             {["15", "30", "60", "120", "480"].map(v => <option key={v} value={v}>{v} min</option>)}
           </select>
         </div>
+      </div>
+
+      {/* ── SAML 2.0 SSO ── */}
+      <div className="rounded-2xl border border-indigo-200 dark:border-indigo-500/30 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center">
+              <KeyRound size={15} className="text-indigo-600 dark:text-indigo-400" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">SAML 2.0 SSO</h3>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500">Enterprise single sign-on</p>
+            </div>
+          </div>
+          <button onClick={() => setSsoEnabled(!ssoEnabled)} className={cn("transition-colors", ssoEnabled ? "text-indigo-500" : "text-slate-300 dark:text-slate-600")}>
+            {ssoEnabled ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+          </button>
+        </div>
+
+        {ssoEnabled && (
+          <div className="space-y-5">
+            {/* IdP selector */}
+            <div>
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1.5 block font-medium">Identity Provider</label>
+              <div className="flex gap-2 flex-wrap">
+                {["okta", "azure_ad", "google", "custom"].map(idp => (
+                  <button
+                    key={idp}
+                    onClick={() => setSsoIdp(idp)}
+                    className={cn(
+                      "px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all",
+                      ssoIdp === idp
+                        ? "bg-indigo-600 border-indigo-600 text-white"
+                        : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-indigo-400 dark:hover:border-indigo-500"
+                    )}
+                  >
+                    {idp === "azure_ad" ? "Azure AD" : idp === "google" ? "Google WS" : idp.charAt(0).toUpperCase() + idp.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* SSO Mode */}
+            <div>
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1.5 block font-medium">SSO Mode</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setSsoMode("optional")}
+                  className={cn(
+                    "flex items-start gap-2.5 p-3 rounded-xl border text-left transition-all",
+                    ssoMode === "optional"
+                      ? "bg-indigo-50 dark:bg-indigo-500/10 border-indigo-300 dark:border-indigo-500/40"
+                      : "bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 hover:border-indigo-300"
+                  )}
+                >
+                  <Unlock size={14} className={cn("mt-0.5 shrink-0", ssoMode === "optional" ? "text-indigo-500" : "text-slate-400")} />
+                  <div>
+                    <p className={cn("text-xs font-semibold", ssoMode === "optional" ? "text-indigo-700 dark:text-indigo-300" : "text-slate-700 dark:text-slate-300")}>Optional</p>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Password login allowed alongside SSO</p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => setSsoMode("enforced")}
+                  className={cn(
+                    "flex items-start gap-2.5 p-3 rounded-xl border text-left transition-all",
+                    ssoMode === "enforced"
+                      ? "bg-indigo-50 dark:bg-indigo-500/10 border-indigo-300 dark:border-indigo-500/40"
+                      : "bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 hover:border-indigo-300"
+                  )}
+                >
+                  <Lock size={14} className={cn("mt-0.5 shrink-0", ssoMode === "enforced" ? "text-indigo-500" : "text-slate-400")} />
+                  <div>
+                    <p className={cn("text-xs font-semibold", ssoMode === "enforced" ? "text-indigo-700 dark:text-indigo-300" : "text-slate-700 dark:text-slate-300")}>Enforced</p>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Password login disabled for all users</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Break-glass (shown only when enforced) */}
+            {ssoMode === "enforced" && (
+              <div className={cn(
+                "flex items-center justify-between p-3 rounded-xl border",
+                breakGlass
+                  ? "bg-amber-50 dark:bg-amber-500/10 border-amber-300 dark:border-amber-500/40"
+                  : "bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700"
+              )}>
+                <div className="flex items-center gap-2">
+                  <ShieldAlert size={14} className={cn(breakGlass ? "text-amber-500" : "text-slate-400")} />
+                  <div>
+                    <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">Break-glass admin bypass</p>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                      {breakGlass ? `Active — expires in ${breakGlassTimer}s` : "Temporarily allow password login for admins"}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={enableBreakGlass}
+                  disabled={breakGlass}
+                  className={cn(
+                    "text-xs font-semibold px-3 py-1.5 rounded-lg transition-all",
+                    breakGlass
+                      ? "bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 cursor-not-allowed"
+                      : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-amber-100 hover:text-amber-700 dark:hover:bg-amber-500/20 dark:hover:text-amber-400"
+                  )}
+                >
+                  {breakGlass ? "Active" : "Activate"}
+                </button>
+              </div>
+            )}
+
+            {/* Email domain routing */}
+            <div>
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1.5 flex items-center gap-1.5 font-medium">
+                <Globe size={11} /> Email domain routing
+              </label>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-slate-400 dark:text-slate-500">@</span>
+                <input
+                  value={emailDomain}
+                  onChange={e => setEmailDomain(e.target.value)}
+                  className="flex-1 px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  placeholder="yourdomain.com"
+                />
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">Users with this email domain are routed to SSO automatically.</p>
+            </div>
+
+            {/* IdP Metadata */}
+            <div>
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1.5 block font-medium">IdP Metadata XML</label>
+              <textarea
+                value={idpMetadata}
+                onChange={e => setIdpMetadata(e.target.value)}
+                rows={4}
+                className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+              />
+              <div className="flex items-center gap-2 mt-1.5">
+                <button className="flex items-center gap-1.5 text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold hover:underline">
+                  <Upload size={11} /> Upload metadata file
+                </button>
+                <span className="text-slate-300 dark:text-slate-600">·</span>
+                <span className="text-[11px] text-slate-400">Certificate expires: <span className="font-semibold text-green-600 dark:text-green-400">Dec 15 2026</span></span>
+              </div>
+            </div>
+
+            {/* SP Details (read-only) */}
+            <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 space-y-3">
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Service Provider Details</p>
+              {[
+                { label: "Entity ID / Issuer", val: SP_ENTITY_ID },
+                { label: "ACS URL",            val: ACS_URL },
+              ].map(row => (
+                <div key={row.label} className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500">{row.label}</p>
+                    <p className="text-xs font-mono text-slate-700 dark:text-slate-300 truncate">{row.val}</p>
+                  </div>
+                  <button
+                    onClick={() => copyText(row.val, setMetaCopied)}
+                    className="shrink-0 p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-indigo-500 transition-colors"
+                    aria-label="Copy"
+                  >
+                    {metaCopied ? <CheckCircle2 size={13} className="text-green-500" /> : <Copy size={13} />}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── SCIM 2.0 Provisioning ── */}
+      <div className="rounded-2xl border border-violet-200 dark:border-violet-500/30 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-violet-100 dark:bg-violet-500/20 flex items-center justify-center">
+              <Users size={15} className="text-violet-600 dark:text-violet-400" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">SCIM 2.0 Provisioning</h3>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500">Automated user &amp; group sync</p>
+            </div>
+          </div>
+          <button onClick={() => setScimEnabled(!scimEnabled)} className={cn("transition-colors", scimEnabled ? "text-violet-500" : "text-slate-300 dark:text-slate-600")}>
+            {scimEnabled ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+          </button>
+        </div>
+
+        {scimEnabled && (
+          <div className="space-y-5">
+            {/* SCIM endpoint */}
+            <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4">
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-1">SCIM Endpoint URL</p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-mono text-slate-700 dark:text-slate-300 flex-1 truncate">{SCIM_URL}</p>
+                <button
+                  onClick={() => copyText(SCIM_URL, setTokenCopied)}
+                  className="shrink-0 p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-violet-500 transition-colors"
+                >
+                  {tokenCopied ? <CheckCircle2 size={13} className="text-green-500" /> : <Copy size={13} />}
+                </button>
+              </div>
+            </div>
+
+            {/* Bearer token */}
+            <div>
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1.5 block font-medium">Bearer Token</label>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
+                  <KeyRound size={12} className="text-violet-400 shrink-0" />
+                  <span className="text-xs font-mono text-slate-600 dark:text-slate-400 flex-1 truncate">
+                    {tokenRevealed ? "scim_tok_a7f3d9e1b2c4a5d6e7f8a9b0c1d2e3f4" : scimToken}
+                  </span>
+                  <button
+                    onClick={() => setTokenRevealed(!tokenRevealed)}
+                    className="text-[11px] text-violet-500 hover:text-violet-400 font-medium shrink-0"
+                  >
+                    {tokenRevealed ? "Hide" : "Reveal"}
+                  </button>
+                </div>
+                <button
+                  onClick={rotateToken}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:border-violet-400 hover:text-violet-600 dark:hover:text-violet-400 transition-all"
+                >
+                  <RefreshCw size={12} /> Rotate
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">Use this token as the Bearer token in your IdP&apos;s SCIM configuration.</p>
+            </div>
+
+            {/* Supported endpoints */}
+            <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4">
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-2 font-medium uppercase tracking-wide">Supported Endpoints</p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {[
+                  "GET /Users", "POST /Users", "PATCH /Users/{id}", "DELETE /Users/{id}",
+                  "GET /Groups", "POST /Groups", "PATCH /Groups/{id}", "DELETE /Groups/{id}",
+                ].map(ep => (
+                  <div key={ep} className="flex items-center gap-1.5">
+                    <CheckCircle2 size={11} className="text-green-500 shrink-0" />
+                    <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">{ep}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Role mapping */}
+            <div>
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1.5 flex items-center gap-1.5 font-medium">
+                <UserCheck size={11} /> Group → Role Mapping
+              </label>
+              <div className="space-y-2 mb-3">
+                {roleMappings.map(rm => (
+                  <div key={rm.id} className="flex items-center gap-2">
+                    <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                      <span className="text-xs font-mono text-violet-600 dark:text-violet-400 flex-1">{rm.group}</span>
+                      <ChevronRight size={12} className="text-slate-300 dark:text-slate-600" />
+                      <span className={cn(
+                        "text-[11px] font-semibold px-2 py-0.5 rounded-full",
+                        rm.role === "Admin"  ? "bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400" :
+                        rm.role === "Member" ? "bg-sky-100 text-sky-600 dark:bg-sky-500/20 dark:text-sky-400" :
+                        "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400"
+                      )}>{rm.role}</span>
+                    </div>
+                    <button
+                      onClick={() => removeRoleMapping(rm.id)}
+                      className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                      aria-label="Remove mapping"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  value={newGroup}
+                  onChange={e => setNewGroup(e.target.value)}
+                  placeholder="SCIM group name…"
+                  className="flex-1 px-3 py-2 text-xs font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-violet-400 placeholder-slate-400"
+                  onKeyDown={e => e.key === "Enter" && addRoleMapping()}
+                />
+                <select
+                  value={newRole}
+                  onChange={e => setNewRole(e.target.value)}
+                  className="px-2 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-violet-400"
+                >
+                  {["Admin", "Member", "Viewer"].map(r => <option key={r}>{r}</option>)}
+                </select>
+                <button
+                  onClick={addRoleMapping}
+                  className="px-3 py-2 text-xs font-semibold rounded-lg bg-violet-600 hover:bg-violet-500 text-white transition-colors"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── SSO Audit Log ── */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center gap-2.5 mb-4">
+          <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+            <ClipboardList size={15} className="text-slate-500 dark:text-slate-400" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">SSO Audit Log</h3>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500">Recent authentication events</p>
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          {ssoAuditEvents.map(ev => (
+            <div key={ev.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+              <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", ev.status === "success" ? "bg-green-500" : "bg-red-500")} />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-slate-700 dark:text-slate-300 font-medium truncate">{ev.event}</p>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate">{ev.user} · {ev.idp}</p>
+              </div>
+              <span className="text-[11px] text-slate-400 dark:text-slate-500 shrink-0">{ev.time}</span>
+            </div>
+          ))}
+        </div>
+        <button className="mt-3 text-xs text-indigo-500 hover:text-indigo-400 font-semibold">
+          Export full audit log →
+        </button>
       </div>
 
       <button
