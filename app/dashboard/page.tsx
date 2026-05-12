@@ -8,6 +8,8 @@ import {
   AlertTriangle, Info, CheckCircle2, X, SlidersHorizontal,
   TrendingDown, Activity, Users, ShieldCheck, Search,
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
+  Database, Plus, Plug, RefreshCw, Play, ChevronRight as ChevRight,
+  Table2, Eye, Layers, Link2, Lock, Unlock, Trash2, TestTube2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -22,7 +24,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings";
+type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings" | "integrations";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -382,6 +384,571 @@ function SettingsPanel() {
   );
 }
 
+// ─── Snowflake Integration Panel ─────────────────────────────────────────────
+
+type ConnStatus = "connected" | "disconnected" | "testing";
+
+interface SnowflakeConn {
+  id: string;
+  name: string;
+  account: string;
+  warehouse: string;
+  database: string;
+  schema: string;
+  status: ConnStatus;
+  lastSync: string;
+  rowsQueried: number;
+}
+
+const MOCK_SCHEMA = {
+  ANALYTICS_DB: {
+    PUBLIC: ["ENERGY_READINGS", "ZONE_METRICS", "BUILDING_SUMMARY", "ALERT_LOG"],
+    REPORTING: ["MONTHLY_ROLLUP", "ESG_METRICS", "COST_ANALYSIS"],
+  },
+  OPERATIONAL_DB: {
+    FACILITIES: ["MAINTENANCE_LOG", "DEVICE_INVENTORY", "SENSOR_DATA"],
+  },
+};
+
+const MOCK_QUERY_RESULTS = {
+  columns: ["ZONE_ID", "BUILDING", "KWH_TODAY", "AVG_BRIGHTNESS", "STATUS"],
+  rows: [
+    ["Z-HQ-01", "HQ Tower",    "42.3", "78%", "ACTIVE"],
+    ["Z-HQ-02", "HQ Tower",    "38.1", "65%", "ACTIVE"],
+    ["Z-WC-01", "West Campus", "29.7", "82%", "ACTIVE"],
+    ["Z-WC-02", "West Campus", "0.0",  "0%",  "OFF"],
+    ["Z-EM-01", "EMEA Office", "51.2", "90%", "ACTIVE"],
+    ["Z-EM-02", "EMEA Office", "44.6", "75%", "ACTIVE"],
+  ],
+};
+
+function IntegrationsPanel() {
+  const [connections, setConnections] = useState<SnowflakeConn[]>([
+    {
+      id: "pg-1",
+      name: "PostgreSQL (Primary)",
+      account: "pg.acme.internal",
+      warehouse: "—",
+      database: "lumiglow_prod",
+      schema: "public",
+      status: "connected",
+      lastSync: "2 min ago",
+      rowsQueried: 1_482_903,
+    },
+    {
+      id: "bq-1",
+      name: "BigQuery (Analytics)",
+      account: "acme-analytics.bigquery",
+      warehouse: "—",
+      database: "lumiglow_bq",
+      schema: "reporting",
+      status: "connected",
+      lastSync: "12 min ago",
+      rowsQueried: 8_201_440,
+    },
+  ]);
+
+  // Wizard states
+  const [showWizard, setShowWizard] = useState(false);
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
+  const [oauthLoading, setOauthLoading] = useState(false);
+  const [oauthDone, setOauthDone] = useState(false);
+  const [testingId, setTestingId] = useState<string | null>(null);
+  const [connForm, setConnForm] = useState({
+    name: "Snowflake (Analytics DW)",
+    account: "acme.us-east-1.snowflakecomputing.com",
+    warehouse: "COMPUTE_WH",
+    database: "ANALYTICS_DB",
+    schema: "PUBLIC",
+  });
+
+  // Schema explorer
+  const [selectedConn, setSelectedConn] = useState<string | null>(null);
+  const [expandedDb, setExpandedDb] = useState<string[]>(["ANALYTICS_DB"]);
+  const [expandedSchema, setExpandedSchema] = useState<string[]>(["ANALYTICS_DB__PUBLIC"]);
+  const [selectedTable, setSelectedTable] = useState<string | null>(null);
+
+  // Query runner
+  const [queryText, setQueryText] = useState(
+    "SELECT zone_id, building, kwh_today, avg_brightness, status\nFROM ANALYTICS_DB.PUBLIC.ZONE_METRICS\nLIMIT 6;"
+  );
+  const [queryRunning, setQueryRunning] = useState(false);
+  const [queryResult, setQueryResult] = useState<typeof MOCK_QUERY_RESULTS | null>(null);
+  const [queryTime, setQueryTime] = useState<number | null>(null);
+
+  const snowflakeConn = connections.find(c => c.id === "sf-1");
+
+  function handleOAuth() {
+    setOauthLoading(true);
+    setTimeout(() => { setOauthLoading(false); setOauthDone(true); }, 2200);
+  }
+
+  function finishWizard() {
+    const newConn: SnowflakeConn = {
+      id: "sf-1",
+      name: connForm.name,
+      account: connForm.account,
+      warehouse: connForm.warehouse,
+      database: connForm.database,
+      schema: connForm.schema,
+      status: "connected",
+      lastSync: "Just now",
+      rowsQueried: 0,
+    };
+    setConnections(prev => [...prev, newConn]);
+    setShowWizard(false);
+    setWizardStep(1);
+    setOauthDone(false);
+    setSelectedConn("sf-1");
+  }
+
+  function testConnection(id: string) {
+    setTestingId(id);
+    setConnections(prev => prev.map(c => c.id === id ? { ...c, status: "testing" } : c));
+    setTimeout(() => {
+      setConnections(prev => prev.map(c => c.id === id ? { ...c, status: "connected", lastSync: "Just now" } : c));
+      setTestingId(null);
+    }, 1800);
+  }
+
+  function removeConn(id: string) {
+    setConnections(prev => prev.filter(c => c.id !== id));
+    if (selectedConn === id) setSelectedConn(null);
+  }
+
+  function runQuery() {
+    setQueryRunning(true);
+    setQueryResult(null);
+    const start = Date.now();
+    setTimeout(() => {
+      setQueryResult(MOCK_QUERY_RESULTS);
+      setQueryTime(Date.now() - start);
+      setQueryRunning(false);
+      setConnections(prev => prev.map(c =>
+        c.id === "sf-1" ? { ...c, rowsQueried: c.rowsQueried + 6, lastSync: "Just now" } : c
+      ));
+    }, 1400);
+  }
+
+  const connTypeIcon = (id: string) => {
+    if (id.startsWith("pg")) return <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center text-[10px] font-bold text-blue-600 dark:text-blue-400">PG</div>;
+    if (id.startsWith("bq")) return <div className="w-8 h-8 rounded-lg bg-yellow-100 dark:bg-yellow-500/20 flex items-center justify-center text-[10px] font-bold text-yellow-600 dark:text-yellow-400">BQ</div>;
+    return <div className="w-8 h-8 rounded-lg bg-cyan-100 dark:bg-cyan-500/20 flex items-center justify-center text-[10px] font-bold text-cyan-600 dark:text-cyan-400">SF</div>;
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white">Data Integrations</h2>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Connect external data sources to LumiGlow</p>
+        </div>
+        {!snowflakeConn && (
+          <button
+            onClick={() => { setShowWizard(true); setWizardStep(1); setOauthDone(false); }}
+            className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors shadow"
+          >
+            <Plus size={14} /> Connect Snowflake
+          </button>
+        )}
+      </div>
+
+      {/* Connection cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {connections.map(conn => (
+          <div
+            key={conn.id}
+            onClick={() => conn.id === "sf-1" && setSelectedConn(conn.id === selectedConn ? null : conn.id)}
+            className={cn(
+              "rounded-2xl border bg-white dark:bg-slate-900 p-5 shadow-sm transition-all",
+              conn.id === "sf-1" ? "cursor-pointer hover:shadow-md" : "",
+              selectedConn === conn.id
+                ? "border-cyan-400 dark:border-cyan-500 ring-1 ring-cyan-400/30"
+                : "border-slate-200 dark:border-slate-700/60"
+            )}
+          >
+            <div className="flex items-start gap-3">
+              {connTypeIcon(conn.id)}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-slate-900 dark:text-white truncate">{conn.name}</span>
+                  <span className={cn(
+                    "shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full",
+                    conn.status === "connected" ? "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400" :
+                    conn.status === "testing"   ? "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400" :
+                    "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400"
+                  )}>
+                    {conn.status === "testing" ? "testing…" : conn.status}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">{conn.account}</p>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2 text-[11px]">
+              <div>
+                <span className="text-slate-400 dark:text-slate-500">Database</span>
+                <p className="font-medium text-slate-700 dark:text-slate-300 truncate">{conn.database}</p>
+              </div>
+              <div>
+                <span className="text-slate-400 dark:text-slate-500">Last sync</span>
+                <p className="font-medium text-slate-700 dark:text-slate-300">{conn.lastSync}</p>
+              </div>
+              {conn.warehouse !== "—" && (
+                <div>
+                  <span className="text-slate-400 dark:text-slate-500">Warehouse</span>
+                  <p className="font-medium text-slate-700 dark:text-slate-300 truncate">{conn.warehouse}</p>
+                </div>
+              )}
+              <div>
+                <span className="text-slate-400 dark:text-slate-500">Rows queried</span>
+                <p className="font-medium text-slate-700 dark:text-slate-300">{conn.rowsQueried.toLocaleString()}</p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center gap-2">
+              <button
+                onClick={e => { e.stopPropagation(); testConnection(conn.id); }}
+                disabled={conn.status === "testing"}
+                className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+              >
+                <RefreshCw size={11} className={conn.status === "testing" ? "animate-spin" : ""} /> Test
+              </button>
+              {conn.id === "sf-1" && (
+                <button
+                  onClick={e => { e.stopPropagation(); setSelectedConn(selectedConn === conn.id ? null : conn.id); }}
+                  className="flex items-center gap-1.5 text-[11px] font-semibold text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-500/10 px-2.5 py-1.5 rounded-lg hover:bg-cyan-100 dark:hover:bg-cyan-500/20 transition-colors"
+                >
+                  <Eye size={11} /> Explore
+                </button>
+              )}
+              <div className="flex-1" />
+              <button
+                onClick={e => { e.stopPropagation(); removeConn(conn.id); }}
+                className="text-slate-300 dark:text-slate-700 hover:text-red-400 dark:hover:text-red-400 transition-colors"
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          </div>
+        ))}
+
+        {/* Add new connector placeholder */}
+        {!snowflakeConn && (
+          <button
+            onClick={() => { setShowWizard(true); setWizardStep(1); setOauthDone(false); }}
+            className="rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 bg-transparent p-5 flex flex-col items-center justify-center gap-2 text-slate-400 dark:text-slate-600 hover:border-cyan-400 dark:hover:border-cyan-500 hover:text-cyan-500 dark:hover:text-cyan-400 transition-all min-h-[160px]"
+          >
+            <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+              <Plus size={20} />
+            </div>
+            <span className="text-xs font-semibold">Connect Snowflake</span>
+          </button>
+        )}
+      </div>
+
+      {/* Snowflake schema explorer + query runner */}
+      {selectedConn === "sf-1" && snowflakeConn && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Schema browser */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+              <Layers size={13} className="text-cyan-500" />
+              <span className="text-xs font-bold text-slate-900 dark:text-white">Schema Browser</span>
+              <span className="ml-auto text-[10px] text-slate-400">{snowflakeConn.account.split(".")[0]}</span>
+            </div>
+            <div className="p-2 overflow-y-auto max-h-80 text-xs">
+              {Object.entries(MOCK_SCHEMA).map(([db, schemas]) => (
+                <div key={db}>
+                  <button
+                    onClick={() => setExpandedDb(prev => prev.includes(db) ? prev.filter(x => x !== db) : [...prev, db])}
+                    className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 text-left font-semibold text-slate-700 dark:text-slate-300"
+                  >
+                    <Database size={11} className="text-cyan-500 shrink-0" />
+                    <span className="flex-1 truncate">{db}</span>
+                    {expandedDb.includes(db) ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+                  </button>
+                  {expandedDb.includes(db) && Object.entries(schemas).map(([schema, tables]) => {
+                    const key = `${db}__${schema}`;
+                    return (
+                      <div key={schema} className="ml-4">
+                        <button
+                          onClick={() => setExpandedSchema(prev => prev.includes(key) ? prev.filter(x => x !== key) : [...prev, key])}
+                          className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 text-left text-slate-500 dark:text-slate-400"
+                        >
+                          <Layers size={10} className="shrink-0" />
+                          <span className="flex-1 truncate">{schema}</span>
+                          {expandedSchema.includes(key) ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+                        </button>
+                        {expandedSchema.includes(key) && tables.map(table => (
+                          <button
+                            key={table}
+                            onClick={() => {
+                              setSelectedTable(table);
+                              setQueryText(`SELECT *\nFROM ${db}.${schema}.${table}\nLIMIT 100;`);
+                            }}
+                            className={cn(
+                              "w-full flex items-center gap-1.5 ml-4 px-2 py-1.5 rounded-lg text-left transition-colors",
+                              selectedTable === table
+                                ? "bg-cyan-50 dark:bg-cyan-500/10 text-cyan-700 dark:text-cyan-400"
+                                : "hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400"
+                            )}
+                          >
+                            <Table2 size={10} className="shrink-0" />
+                            <span className="truncate">{table}</span>
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Query runner */}
+          <div className="lg:col-span-2 rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 shadow-sm overflow-hidden flex flex-col">
+            <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+              <Play size={13} className="text-cyan-500" />
+              <span className="text-xs font-bold text-slate-900 dark:text-white">Query Runner</span>
+              <span className="ml-auto flex items-center gap-1.5 text-[10px] text-green-600 dark:text-green-400 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" /> {snowflakeConn.warehouse}
+              </span>
+            </div>
+
+            {/* Editor */}
+            <div className="p-3 border-b border-slate-100 dark:border-slate-800">
+              <textarea
+                value={queryText}
+                onChange={e => setQueryText(e.target.value)}
+                rows={4}
+                className="w-full text-xs font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2.5 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 resize-none"
+                placeholder="SELECT * FROM ..."
+                spellCheck={false}
+              />
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-[10px] text-slate-400">
+                  {queryResult && queryTime !== null
+                    ? `${queryResult.rows.length} rows · ${queryTime} ms`
+                    : "Run a query against Snowflake"}
+                </span>
+                <button
+                  onClick={runQuery}
+                  disabled={queryRunning}
+                  className="flex items-center gap-1.5 text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 disabled:opacity-60 text-white px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  {queryRunning
+                    ? <><RefreshCw size={12} className="animate-spin" /> Running…</>
+                    : <><Play size={12} /> Run Query</>}
+                </button>
+              </div>
+            </div>
+
+            {/* Results */}
+            <div className="flex-1 overflow-auto">
+              {!queryResult && !queryRunning && (
+                <div className="flex flex-col items-center justify-center h-32 text-slate-300 dark:text-slate-700 gap-2">
+                  <Database size={28} />
+                  <span className="text-xs">No results yet — run a query above</span>
+                </div>
+              )}
+              {queryRunning && (
+                <div className="flex flex-col items-center justify-center h-32 gap-2">
+                  <RefreshCw size={20} className="text-cyan-500 animate-spin" />
+                  <span className="text-xs text-slate-400">Streaming results from Snowflake…</span>
+                </div>
+              )}
+              {queryResult && !queryRunning && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60">
+                        {queryResult.columns.map(col => (
+                          <th key={col} className="px-4 py-2 text-left font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">{col}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {queryResult.rows.map((row, i) => (
+                        <tr key={i} className="border-b border-slate-50 dark:border-slate-800/60 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                          {row.map((cell, j) => (
+                            <td key={j} className={cn(
+                              "px-4 py-2 whitespace-nowrap font-mono",
+                              cell === "ACTIVE" ? "text-green-600 dark:text-green-400 font-semibold" :
+                              cell === "OFF"    ? "text-slate-400" :
+                              "text-slate-700 dark:text-slate-300"
+                            )}>{cell}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Connect Snowflake Wizard ── */}
+      {showWizard && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden">
+            {/* Wizard header */}
+            <div className="bg-gradient-to-r from-cyan-600 to-blue-600 px-6 py-5">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
+                  <Database size={18} className="text-white" />
+                </div>
+                <div>
+                  <p className="text-white font-bold text-sm">Connect Snowflake</p>
+                  <p className="text-white/70 text-xs">Step {wizardStep} of 3</p>
+                </div>
+                <button onClick={() => setShowWizard(false)} className="ml-auto text-white/60 hover:text-white">
+                  <X size={18} />
+                </button>
+              </div>
+              {/* Progress bar */}
+              <div className="mt-4 h-1 bg-white/20 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-white rounded-full transition-all duration-500"
+                  style={{ width: `${(wizardStep / 3) * 100}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="p-6">
+              {/* Step 1: Account config */}
+              {wizardStep === 1 && (
+                <div className="space-y-4">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Connection details</h3>
+                  <div className="space-y-3">
+                    {[
+                      { label: "Connection name", key: "name", placeholder: "e.g. Snowflake (Analytics DW)" },
+                      { label: "Account locator", key: "account", placeholder: "e.g. xyz12345.us-east-1" },
+                      { label: "Warehouse", key: "warehouse", placeholder: "e.g. COMPUTE_WH" },
+                      { label: "Default database", key: "database", placeholder: "e.g. ANALYTICS_DB" },
+                      { label: "Default schema", key: "schema", placeholder: "e.g. PUBLIC" },
+                    ].map(field => (
+                      <div key={field.key}>
+                        <label className="text-xs font-medium text-slate-500 dark:text-slate-400 block mb-1">{field.label}</label>
+                        <input
+                          value={connForm[field.key as keyof typeof connForm]}
+                          onChange={e => setConnForm(prev => ({ ...prev, [field.key]: e.target.value }))}
+                          placeholder={field.placeholder}
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setWizardStep(2)}
+                    className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-sm py-2.5 rounded-xl transition-colors mt-2"
+                  >
+                    Next: Authenticate →
+                  </button>
+                </div>
+              )}
+
+              {/* Step 2: OAuth */}
+              {wizardStep === 2 && (
+                <div className="space-y-5">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">OAuth2 Authentication</h3>
+                  <div className="rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4 space-y-2 text-xs text-slate-600 dark:text-slate-300">
+                    <div className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200">
+                      <Lock size={12} className="text-cyan-500" /> OAuth2 with PKCE
+                    </div>
+                    <p>LumiGlow will request read-only access to your Snowflake account using the OAuth 2.0 Authorization Code flow with PKCE. No credentials are stored in plain text.</p>
+                    <p className="text-slate-400">Scopes: <code className="bg-slate-200 dark:bg-slate-700 px-1 rounded">session:role:LUMIGLOW_READER</code></p>
+                  </div>
+
+                  {!oauthDone ? (
+                    <button
+                      onClick={handleOAuth}
+                      disabled={oauthLoading}
+                      className="w-full flex items-center justify-center gap-2 bg-[#29B5E8] hover:bg-[#22a4d4] disabled:opacity-70 text-white font-semibold text-sm py-3 rounded-xl transition-colors"
+                    >
+                      {oauthLoading ? (
+                        <><RefreshCw size={14} className="animate-spin" /> Authorizing with Snowflake…</>
+                      ) : (
+                        <><Link2 size={14} /> Authorize with Snowflake</>
+                      )}
+                    </button>
+                  ) : (
+                    <div className="rounded-xl bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/30 p-4 flex items-center gap-3">
+                      <CheckCircle2 size={18} className="text-green-500 shrink-0" />
+                      <div>
+                        <p className="text-sm font-semibold text-green-700 dark:text-green-400">Authorization successful</p>
+                        <p className="text-xs text-green-600/70 dark:text-green-400/70">Token stored securely. Refresh handled automatically.</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex gap-3">
+                    <button onClick={() => setWizardStep(1)} className="flex-1 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-semibold text-sm py-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                      ← Back
+                    </button>
+                    <button
+                      onClick={() => setWizardStep(3)}
+                      disabled={!oauthDone}
+                      className="flex-1 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 text-white font-semibold text-sm py-2.5 rounded-xl transition-colors"
+                    >
+                      Next: Verify →
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 3: Verify + finish */}
+              {wizardStep === 3 && (
+                <div className="space-y-5">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Connection verified</h3>
+                  <div className="rounded-xl bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/30 p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-green-700 dark:text-green-400 font-semibold text-sm">
+                      <CheckCircle2 size={16} /> All checks passed
+                    </div>
+                    {[
+                      { label: "Account reachable", ok: true },
+                      { label: "OAuth token valid", ok: true },
+                      { label: "Warehouse accessible", ok: true },
+                      { label: "Schema discovery", ok: true },
+                    ].map(c => (
+                      <div key={c.label} className="flex items-center gap-2 text-xs">
+                        <CheckCircle2 size={12} className="text-green-500 shrink-0" />
+                        <span className="text-slate-600 dark:text-slate-300">{c.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4 text-xs space-y-1">
+                    {[
+                      ["Account", connForm.account],
+                      ["Warehouse", connForm.warehouse],
+                      ["Database", connForm.database],
+                      ["Schema", connForm.schema],
+                    ].map(([k, v]) => (
+                      <div key={k} className="flex justify-between">
+                        <span className="text-slate-400">{k}</span>
+                        <span className="font-medium text-slate-700 dark:text-slate-200 font-mono">{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={finishWizard}
+                    className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-sm py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle2 size={14} /> Save connection
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -441,12 +1008,13 @@ export default function DashboardPage() {
   const savings = 31;
 
   const navItems: { id: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
-    { id: "overview",  label: "Overview",  icon: <LayoutDashboard size={17} /> },
-    { id: "buildings", label: "Buildings", icon: <Building2 size={17} /> },
-    { id: "alerts",    label: "Alerts",    icon: <Bell size={17} />, badge: alertList.filter(a => a.severity !== "info").length },
-    { id: "schedules", label: "Schedules", icon: <Calendar size={17} /> },
-    { id: "reports",   label: "Reports",   icon: <BarChart3 size={17} /> },
-    { id: "settings",  label: "Settings",  icon: <Settings size={17} /> },
+    { id: "overview",      label: "Overview",     icon: <LayoutDashboard size={17} /> },
+    { id: "buildings",     label: "Buildings",    icon: <Building2 size={17} /> },
+    { id: "alerts",        label: "Alerts",       icon: <Bell size={17} />, badge: alertList.filter(a => a.severity !== "info").length },
+    { id: "schedules",     label: "Schedules",    icon: <Calendar size={17} /> },
+    { id: "reports",       label: "Reports",      icon: <BarChart3 size={17} /> },
+    { id: "integrations",  label: "Integrations", icon: <Database size={17} />, badge: 1 },
+    { id: "settings",      label: "Settings",     icon: <Settings size={17} /> },
   ];
 
   const filteredZones = buildings
@@ -492,8 +1060,11 @@ export default function DashboardPage() {
               {item.icon}
               <span className="flex-1">{item.label}</span>
               {item.badge != null && item.badge > 0 && (
-                <span className="bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
-                  {item.badge}
+                <span className={cn(
+                  "text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center",
+                  item.id === "integrations" ? "bg-cyan-500" : "bg-red-500"
+                )}>
+                  {item.id === "integrations" ? "N" : item.badge}
                 </span>
               )}
             </button>
@@ -926,6 +1497,9 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
+
+          {/* ── INTEGRATIONS ── */}
+          {tab === "integrations" && <IntegrationsPanel />}
 
           {/* ── SETTINGS ── */}
           {tab === "settings" && <SettingsPanel />}
