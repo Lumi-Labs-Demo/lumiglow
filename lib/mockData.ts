@@ -97,11 +97,84 @@ export interface Alert {
 }
 
 export const alerts: Alert[] = [
+  { id: "a6", severity: "critical", message: "504 Gateway Timeout — API endpoint unreachable", zone: "API Gateway",  ts: "Just now"  },
   { id: "a1", severity: "critical", message: "Zone offline — driver failure detected", zone: "Parking B1",   ts: "6 hr ago"  },
   { id: "a2", severity: "warning",  message: "Energy spike (+34%) above baseline",     zone: "Main Atrium",  ts: "2 hr ago"  },
   { id: "a3", severity: "warning",  message: "Schedule drift detected (>5 min)",       zone: "Open Office",  ts: "1 hr ago"  },
   { id: "a4", severity: "info",     message: "Firmware update available (v4.2.1)",     zone: "All zones",    ts: "30 min ago"},
   { id: "a5", severity: "info",     message: "Daily energy report generated",          zone: "HQ Tower",     ts: "12 min ago"},
+];
+
+// ─── API Health ───────────────────────────────────────────────────────────────
+
+export interface ApiEndpoint {
+  id: string;
+  name: string;
+  path: string;
+  status: "healthy" | "degraded" | "down";
+  responseMs: number;
+  errorRate: number; // percent
+  uptime: number;    // percent last 30d
+  timeoutMs: number;
+  lastIncident: string | null;
+}
+
+export const apiEndpoints: ApiEndpoint[] = [
+  {
+    id: "ep1",
+    name: "Zone Control",
+    path: "/api/v2/zones",
+    status: "healthy",
+    responseMs: 48,
+    errorRate: 0.1,
+    uptime: 99.97,
+    timeoutMs: 5000,
+    lastIncident: null,
+  },
+  {
+    id: "ep2",
+    name: "Energy Metrics",
+    path: "/api/v2/energy",
+    status: "degraded",
+    responseMs: 1240,
+    errorRate: 4.2,
+    uptime: 98.81,
+    timeoutMs: 5000,
+    lastIncident: "504 Gateway Timeout · Just now",
+  },
+  {
+    id: "ep3",
+    name: "Schedules",
+    path: "/api/v2/schedules",
+    status: "healthy",
+    responseMs: 62,
+    errorRate: 0.0,
+    uptime: 99.99,
+    timeoutMs: 5000,
+    lastIncident: null,
+  },
+  {
+    id: "ep4",
+    name: "Alerts & Events",
+    path: "/api/v2/alerts",
+    status: "healthy",
+    responseMs: 35,
+    errorRate: 0.3,
+    uptime: 99.95,
+    timeoutMs: 5000,
+    lastIncident: null,
+  },
+  {
+    id: "ep5",
+    name: "Auth Gateway",
+    path: "/api/v2/auth",
+    status: "down",
+    responseMs: 0,
+    errorRate: 100,
+    uptime: 94.40,
+    timeoutMs: 5000,
+    lastIncident: "504 Gateway Timeout · Just now",
+  },
 ];
 
 // ─── Energy Chart Data ────────────────────────────────────────────────────────
