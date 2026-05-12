@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import {
   Zap, LayoutDashboard, Building2, Bell, Calendar,
@@ -281,6 +281,22 @@ function SettingsPanel() {
   const [twoFA, setTwoFA] = useState(true);
   const [sessionTimeout, setSessionTimeout] = useState("60");
   const [saved, setSaved] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+
+  useEffect(() => {
+    setDarkMode(localStorage.getItem("lumiglow-theme") === "dark");
+  }, []);
+
+  function toggleDarkMode(val: boolean) {
+    setDarkMode(val);
+    if (val) {
+      localStorage.setItem("lumiglow-theme", "dark");
+      document.documentElement.setAttribute("data-theme", "dark");
+    } else {
+      localStorage.setItem("lumiglow-theme", "light");
+      document.documentElement.removeAttribute("data-theme");
+    }
+  }
 
   function save() {
     setSaved(true);
@@ -341,6 +357,24 @@ function SettingsPanel() {
           </div>
           <button onClick={() => setAutoPolicy(!autoPolicy)} className={cn("transition-colors", autoPolicy ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>
             {autoPolicy ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+          </button>
+        </div>
+      </div>
+
+      {/* Appearance */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-4">Appearance</h3>
+        <div className="flex items-center justify-between py-3">
+          <div>
+            <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">Dark mode</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">Apply dark theme to your dashboard</p>
+          </div>
+          <button
+            onClick={() => toggleDarkMode(!darkMode)}
+            className={cn("transition-colors", darkMode ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}
+            aria-label={darkMode ? "Disable dark mode" : "Enable dark mode"}
+          >
+            {darkMode ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
           </button>
         </div>
       </div>

@@ -1,19 +1,16 @@
 "use client";
-import { Monitor, Sun, Moon } from "lucide-react";
+import { Sun, Moon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-type Theme = "system" | "light" | "dark";
+type Theme = "light" | "dark";
 
-const OPTIONS: { value: Theme; label: string; Icon: typeof Monitor }[] = [
-  { value: "system", label: "System", Icon: Monitor },
-  { value: "light",  label: "Light",  Icon: Sun },
-  { value: "dark",   label: "Dark",   Icon: Moon },
+const OPTIONS: { value: Theme; label: string; Icon: typeof Sun }[] = [
+  { value: "light", label: "Light", Icon: Sun },
+  { value: "dark",  label: "Dark",  Icon: Moon },
 ];
 
 function applyTheme(theme: Theme) {
-  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-  const dark = theme === "dark" || (theme === "system" && prefersDark);
-  if (dark) {
+  if (theme === "dark") {
     document.documentElement.setAttribute("data-theme", "dark");
   } else {
     document.documentElement.removeAttribute("data-theme");
@@ -21,23 +18,15 @@ function applyTheme(theme: Theme) {
 }
 
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>("system");
+  const [theme, setTheme] = useState<Theme>("light");
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const saved = (localStorage.getItem("lumiglow-theme") as Theme | null) ?? "system";
-    setTheme(saved);
-
-    // Keep system mode in sync when OS preference changes
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const onSystem = () => {
-      if ((localStorage.getItem("lumiglow-theme") ?? "system") === "system") {
-        applyTheme("system");
-      }
-    };
-    mq.addEventListener("change", onSystem);
-    return () => mq.removeEventListener("change", onSystem);
+    const saved = localStorage.getItem("lumiglow-theme") as Theme | null;
+    const resolved: Theme = saved === "dark" ? "dark" : "light";
+    setTheme(resolved);
+    applyTheme(resolved);
   }, []);
 
   useEffect(() => {
@@ -51,11 +40,7 @@ export default function ThemeToggle() {
   function select(next: Theme) {
     setTheme(next);
     setOpen(false);
-    if (next === "system") {
-      localStorage.removeItem("lumiglow-theme");
-    } else {
-      localStorage.setItem("lumiglow-theme", next);
-    }
+    localStorage.setItem("lumiglow-theme", next);
     applyTheme(next);
   }
 
@@ -79,7 +64,7 @@ export default function ThemeToggle() {
         <div
           role="listbox"
           aria-label="Appearance"
-          className="absolute right-0 mt-1 w-32 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg shadow-slate-900/10 dark:shadow-slate-950/40 py-1 z-50 animate-fade-in"
+          className="absolute right-0 mt-1 w-28 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg shadow-slate-900/10 dark:shadow-slate-950/40 py-1 z-50 animate-fade-in"
         >
           {OPTIONS.map(({ value, label, Icon: OptionIcon }) => (
             <button
