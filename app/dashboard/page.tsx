@@ -7,8 +7,9 @@ import {
   BarChart3, Settings, LogOut, ChevronRight, Sun, Moon,
   AlertTriangle, Info, CheckCircle2, X, SlidersHorizontal,
   TrendingDown, Activity, Users, ShieldCheck, Search,
-  ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
+  ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu, Code2,
 } from "lucide-react";
+import DevModePanel from "@/components/DevModePanel";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
 import {
@@ -22,7 +23,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings";
+type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings" | "devmode";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -447,6 +448,7 @@ export default function DashboardPage() {
     { id: "schedules", label: "Schedules", icon: <Calendar size={17} /> },
     { id: "reports",   label: "Reports",   icon: <BarChart3 size={17} /> },
     { id: "settings",  label: "Settings",  icon: <Settings size={17} /> },
+    { id: "devmode",   label: "Dev Mode",  icon: <Code2 size={17} /> },
   ];
 
   const filteredZones = buildings
@@ -929,6 +931,9 @@ export default function DashboardPage() {
 
           {/* ── SETTINGS ── */}
           {tab === "settings" && <SettingsPanel />}
+
+          {/* ── DEV MODE ── */}
+          {tab === "devmode" && <DevModePanel />}
 
         </main>
       </div>
