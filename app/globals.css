@@ -25,6 +25,21 @@
   --color-brand:       251 191  36;   /* amber-400 */
 }
 
+/* CSS-only fallback: applies dark tokens when OS prefers dark AND JS hasn't
+   explicitly set data-theme="light". Covers Android browsers where matchMedia
+   or localStorage access may fail silently before JS runs. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-bg:            2   6  23;
+    --color-bg-subtle:    15  23  42;
+    --color-surface:      30  41  59;
+    --color-border:       30  41  59;
+    --color-text:        241 245 249;
+    --color-text-muted:  148 163 184;
+    --color-brand:       251 191  36;
+  }
+}
+
 @layer base {
   * {
     @apply border-border;
