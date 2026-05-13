@@ -8,6 +8,8 @@ import {
   AlertTriangle, Info, CheckCircle2, X, SlidersHorizontal,
   TrendingDown, Activity, Users, ShieldCheck, Search,
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
+  Database, RefreshCw, CloudOff, CloudLightning, Table2,
+  Clock, Link2, Wifi, WifiOff, ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -22,7 +24,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings";
+type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings" | "integrations";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -271,6 +273,229 @@ const reports = [
   { id: "r5", name: "Firmware Inventory",     scope: "All buildings", generated: "Apr 25, 2025",  size: "34 KB"  },
 ];
 
+// ─── Redshift Integration Panel ──────────────────────────────────────────────
+
+const redshiftTables = [
+  { name: "energy_readings",  rows: "2.4M",  lastSync: "2 min ago",   status: "synced"  as const },
+  { name: "zone_events",      rows: "891K",  lastSync: "2 min ago",   status: "synced"  as const },
+  { name: "alert_logs",       rows: "47K",   lastSync: "2 min ago",   status: "synced"  as const },
+  { name: "schedule_history", rows: "12K",   lastSync: "5 min ago",   status: "synced"  as const },
+  { name: "building_meta",    rows: "3.2K",  lastSync: "1 hr ago",    status: "synced"  as const },
+  { name: "firmware_events",  rows: "108K",  lastSync: "pending",     status: "pending" as const },
+];
+
+function RedshiftPanel() {
+  const [connected, setConnected] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncFreq, setSyncFreq] = useState("5");
+  const [encryptionEnabled, setEncryptionEnabled] = useState(true);
+  const [compressionEnabled, setCompressionEnabled] = useState(true);
+  const [lastFullSync] = useState("Today 04:00 AM");
+  const [toast, setToast] = useState<string | null>(null);
+
+  function runSync() {
+    setSyncing(true);
+    setTimeout(() => {
+      setSyncing(false);
+      setToast("Sync complete — all 6 tables up to date");
+      setTimeout(() => setToast(null), 3000);
+    }, 2200);
+  }
+
+  function toggleConnection() {
+    setConnected(c => !c);
+  }
+
+  return (
+    <div className="max-w-3xl space-y-6">
+      {/* Header banner */}
+      <div className={cn(
+        "rounded-2xl border p-5 flex items-center gap-4 shadow-sm",
+        connected
+          ? "bg-gradient-to-r from-violet-50 to-sky-50 dark:from-violet-500/5 dark:to-sky-500/5 border-violet-200/60 dark:border-violet-500/20"
+          : "bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700/60"
+      )}>
+        <div className={cn(
+          "w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow",
+          connected ? "bg-violet-600" : "bg-slate-400 dark:bg-slate-600"
+        )}>
+          <Database size={22} className="text-white" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Amazon Redshift</h3>
+            <span className={cn(
+              "text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1",
+              connected
+                ? "bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400"
+                : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+            )}>
+              {connected ? <Wifi size={9} /> : <WifiOff size={9} />}
+              {connected ? "Connected" : "Disconnected"}
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+            cluster: lumiglow-prod.us-east-1.redshift.amazonaws.com · db: lumiglow_analytics
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={runSync}
+            disabled={syncing || !connected}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all",
+              connected && !syncing
+                ? "bg-violet-600 hover:bg-violet-500 text-white shadow"
+                : "bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed"
+            )}
+          >
+            <RefreshCw size={12} className={syncing ? "animate-spin" : ""} />
+            {syncing ? "Syncing…" : "Sync now"}
+          </button>
+          <button
+            onClick={toggleConnection}
+            className="text-xs text-slate-500 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors font-medium px-2 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            {connected ? "Disconnect" : "Connect"}
+          </button>
+        </div>
+      </div>
+
+      {/* Stats row */}
+      {connected && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: "Tables synced",   value: "6 / 6",     icon: <Table2 size={14} className="text-violet-500" /> },
+            { label: "Total rows",      value: "3.46M",     icon: <Database size={14} className="text-sky-500" /> },
+            { label: "Last full sync",  value: lastFullSync, icon: <Clock size={14} className="text-amber-500" /> },
+            { label: "Sync frequency",  value: `${syncFreq} min`,  icon: <RefreshCw size={14} className="text-green-500" /> },
+          ].map(s => (
+            <div key={s.label} className="rounded-xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-3 shadow-sm flex items-center gap-2.5">
+              <div className="shrink-0">{s.icon}</div>
+              <div>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500">{s.label}</p>
+                <p className="text-sm font-bold text-slate-900 dark:text-white">{s.value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Tables */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Synced tables</h3>
+          <span className="text-xs text-slate-400 dark:text-slate-500">lumiglow_analytics schema</span>
+        </div>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-50 dark:border-slate-800">
+              <th className="text-left text-xs font-semibold text-slate-400 px-5 py-2.5">Table</th>
+              <th className="text-left text-xs font-semibold text-slate-400 px-3 py-2.5 hidden sm:table-cell">Rows</th>
+              <th className="text-left text-xs font-semibold text-slate-400 px-3 py-2.5">Last sync</th>
+              <th className="text-left text-xs font-semibold text-slate-400 px-5 py-2.5">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {redshiftTables.map((t, i) => (
+              <tr key={t.name} className={cn(
+                "border-b border-slate-50 dark:border-slate-800/80 last:border-0",
+                i % 2 !== 0 && "bg-slate-50/50 dark:bg-slate-800/20"
+              )}>
+                <td className="px-5 py-3">
+                  <div className="flex items-center gap-2">
+                    <Table2 size={12} className="text-slate-400 shrink-0" />
+                    <span className="font-mono text-xs font-medium text-slate-700 dark:text-slate-300">{t.name}</span>
+                  </div>
+                </td>
+                <td className="px-3 py-3 text-xs text-slate-500 dark:text-slate-400 hidden sm:table-cell">{t.rows}</td>
+                <td className="px-3 py-3 text-xs text-slate-400 dark:text-slate-500">{t.lastSync}</td>
+                <td className="px-5 py-3">
+                  {t.status === "synced" ? (
+                    <span className="flex items-center gap-1 text-[11px] font-semibold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2 py-0.5 rounded-full w-fit">
+                      <CheckCircle2 size={10} /> synced
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-[11px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/15 px-2 py-0.5 rounded-full w-fit">
+                      <RefreshCw size={10} className="animate-spin" /> pending
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Configuration */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-5">
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Sync configuration</h3>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Cluster endpoint</label>
+            <input
+              defaultValue="lumiglow-prod.us-east-1.redshift.amazonaws.com"
+              className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-400 font-mono"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Database</label>
+            <input
+              defaultValue="lumiglow_analytics"
+              className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-400 font-mono"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Port</label>
+            <input
+              defaultValue="5439"
+              className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-400 font-mono"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Sync frequency</label>
+            <select
+              value={syncFreq}
+              onChange={e => setSyncFreq(e.target.value)}
+              className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-400"
+            >
+              {["1", "5", "15", "30", "60"].map(v => (
+                <option key={v} value={v}>Every {v} minute{v !== "1" ? "s" : ""}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="space-y-3 border-t border-slate-100 dark:border-slate-800 pt-4">
+          {[
+            { label: "Encrypt data in transit", sub: "TLS 1.3 for all connections", val: encryptionEnabled, set: setEncryptionEnabled },
+            { label: "Compression", sub: "GZIP compression for bulk transfers", val: compressionEnabled, set: setCompressionEnabled },
+          ].map(row => (
+            <div key={row.label} className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{row.label}</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500">{row.sub}</p>
+              </div>
+              <button onClick={() => row.set(!row.val)} className={cn("transition-colors", row.val ? "text-violet-500" : "text-slate-300 dark:text-slate-600")}>
+                {row.val ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-slate-900 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-xl">
+          <CheckCircle2 size={15} className="text-green-400 shrink-0" />
+          {toast}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Settings Panel ───────────────────────────────────────────────────────────
 
 function SettingsPanel() {
@@ -441,12 +666,13 @@ export default function DashboardPage() {
   const savings = 31;
 
   const navItems: { id: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
-    { id: "overview",  label: "Overview",  icon: <LayoutDashboard size={17} /> },
-    { id: "buildings", label: "Buildings", icon: <Building2 size={17} /> },
-    { id: "alerts",    label: "Alerts",    icon: <Bell size={17} />, badge: alertList.filter(a => a.severity !== "info").length },
-    { id: "schedules", label: "Schedules", icon: <Calendar size={17} /> },
-    { id: "reports",   label: "Reports",   icon: <BarChart3 size={17} /> },
-    { id: "settings",  label: "Settings",  icon: <Settings size={17} /> },
+    { id: "overview",     label: "Overview",     icon: <LayoutDashboard size={17} /> },
+    { id: "buildings",    label: "Buildings",    icon: <Building2 size={17} /> },
+    { id: "alerts",       label: "Alerts",       icon: <Bell size={17} />, badge: alertList.filter(a => a.severity !== "info").length },
+    { id: "schedules",    label: "Schedules",    icon: <Calendar size={17} /> },
+    { id: "reports",      label: "Reports",      icon: <BarChart3 size={17} /> },
+    { id: "integrations", label: "Integrations", icon: <Database size={17} /> },
+    { id: "settings",     label: "Settings",     icon: <Settings size={17} /> },
   ];
 
   const filteredZones = buildings
@@ -923,6 +1149,67 @@ export default function DashboardPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {/* ── INTEGRATIONS ── */}
+          {tab === "integrations" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-white">Integrations</h2>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Connect LumiGlow to external data platforms</p>
+                </div>
+              </div>
+
+              {/* Integration cards grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-2">
+                {/* Redshift — active */}
+                <button
+                  onClick={() => {/* already shown below */}}
+                  className="flex items-center gap-3 p-4 rounded-2xl border border-violet-200 dark:border-violet-500/30 bg-gradient-to-br from-violet-50 to-sky-50 dark:from-violet-500/5 dark:to-sky-500/5 shadow-sm hover:shadow-md transition-shadow text-left"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-violet-600 flex items-center justify-center shrink-0 shadow">
+                    <Database size={18} className="text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white">Amazon Redshift</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">Data warehouse sync</p>
+                  </div>
+                  <span className="text-[10px] font-bold bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 px-2 py-0.5 rounded-full shrink-0">Active</span>
+                </button>
+
+                {/* Other integrations — coming soon */}
+                {[
+                  { name: "Snowflake", desc: "Cloud data platform", color: "bg-sky-500" },
+                  { name: "Databricks", desc: "Unified analytics", color: "bg-orange-500" },
+                  { name: "BigQuery",  desc: "Google analytics DW", color: "bg-blue-500" },
+                  { name: "Tableau",   desc: "BI & visualization",  color: "bg-indigo-500" },
+                  { name: "Power BI",  desc: "Microsoft analytics", color: "bg-yellow-500" },
+                ].map(int => (
+                  <div key={int.name} className="flex items-center gap-3 p-4 rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-900 shadow-sm opacity-60 cursor-not-allowed">
+                    <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0", int.color)}>
+                      <Link2 size={16} className="text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-900 dark:text-white">{int.name}</p>
+                      <p className="text-xs text-slate-400 truncate">{int.desc}</p>
+                    </div>
+                    <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full shrink-0">Soon</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Redshift detail panel */}
+              <div className="border-t border-slate-200 dark:border-slate-700/50 pt-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <Database size={14} className="text-violet-500" />
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Redshift configuration</h3>
+                  <ArrowRight size={13} className="text-slate-400" />
+                  <span className="text-xs text-slate-500 dark:text-slate-400">lumiglow_analytics</span>
+                </div>
+                <RedshiftPanel />
               </div>
             </div>
           )}
