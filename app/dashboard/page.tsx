@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   Zap, LayoutDashboard, Building2, Bell, Calendar,
@@ -8,6 +8,7 @@ import {
   AlertTriangle, Info, CheckCircle2, X, SlidersHorizontal,
   TrendingDown, Activity, Users, ShieldCheck, Search,
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
+  Palette, Upload, Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -23,6 +24,14 @@ import {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings";
+
+interface BrandingConfig {
+  companyName: string;
+  tagline: string;
+  accentColor: string;
+  logoUrl: string;
+  logoInitials: string;
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -273,7 +282,13 @@ const reports = [
 
 // ─── Settings Panel ───────────────────────────────────────────────────────────
 
-function SettingsPanel() {
+function SettingsPanel({
+  branding,
+  onBrandingChange,
+}: {
+  branding: BrandingConfig;
+  onBrandingChange: (b: BrandingConfig) => void;
+}) {
   const [notifEmail, setNotifEmail] = useState(true);
   const [notifSlack, setNotifSlack] = useState(true);
   const [notifPager, setNotifPager] = useState(false);
@@ -282,10 +297,33 @@ function SettingsPanel() {
   const [sessionTimeout, setSessionTimeout] = useState("60");
   const [saved, setSaved] = useState(false);
 
+  const [draft, setDraft] = useState<BrandingConfig>(branding);
+  const [brandingSaved, setBrandingSaved] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   function save() {
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
+
+  function applyBranding() {
+    onBrandingChange(draft);
+    setBrandingSaved(true);
+    setTimeout(() => setBrandingSaved(false), 2500);
+  }
+
+  function handleLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setDraft(d => ({ ...d, logoUrl: ev.target?.result as string }));
+    };
+    reader.readAsDataURL(file);
+  }
+
+  const accentStyle = { backgroundColor: draft.accentColor };
+  const accentText = { color: draft.accentColor };
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -369,6 +407,167 @@ function SettingsPanel() {
         </div>
       </div>
 
+      {/* Custom Branding */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-5">
+          <Palette size={16} style={accentText} />
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Custom Branding</h3>
+          <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400">Enterprise</span>
+        </div>
+
+        {/* Company name + tagline */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Company name</label>
+            <input
+              value={draft.companyName}
+              onChange={e => setDraft(d => ({ ...d, companyName: e.target.value }))}
+              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+              placeholder="ACME Corp"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Logo initials (fallback)</label>
+            <input
+              value={draft.logoInitials}
+              onChange={e => setDraft(d => ({ ...d, logoInitials: e.target.value.slice(0, 3) }))}
+              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+              placeholder="AC"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Tagline</label>
+            <input
+              value={draft.tagline}
+              onChange={e => setDraft(d => ({ ...d, tagline: e.target.value }))}
+              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+              placeholder="Smart Lighting Console · ACME Corp"
+            />
+          </div>
+        </div>
+
+        {/* Accent color */}
+        <div className="mb-4">
+          <label className="text-xs text-slate-500 dark:text-slate-400 mb-2 block">Primary accent color</label>
+          <div className="flex items-center gap-3 flex-wrap">
+            {["#f59e0b", "#6366f1", "#10b981", "#ef4444", "#3b82f6", "#ec4899", "#8b5cf6", "#0ea5e9"].map(color => (
+              <button
+                key={color}
+                onClick={() => setDraft(d => ({ ...d, accentColor: color }))}
+                style={{ backgroundColor: color }}
+                className={cn(
+                  "w-7 h-7 rounded-full transition-transform hover:scale-110 border-2",
+                  draft.accentColor === color ? "border-white dark:border-slate-900 scale-110 shadow-md" : "border-transparent"
+                )}
+              />
+            ))}
+            <div className="flex items-center gap-2 ml-1">
+              <input
+                type="color"
+                value={draft.accentColor}
+                onChange={e => setDraft(d => ({ ...d, accentColor: e.target.value }))}
+                className="w-7 h-7 rounded cursor-pointer border border-slate-200 dark:border-slate-700"
+                title="Custom color"
+              />
+              <span className="text-xs text-slate-400 font-mono">{draft.accentColor}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Logo upload */}
+        <div className="mb-5">
+          <label className="text-xs text-slate-500 dark:text-slate-400 mb-2 block">Logo (PNG or SVG)</label>
+          <div className="flex items-center gap-3">
+            {draft.logoUrl ? (
+              <div className="w-12 h-12 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex items-center justify-center overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={draft.logoUrl} alt="Logo preview" className="max-w-full max-h-full object-contain" />
+              </div>
+            ) : (
+              <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center text-white text-sm font-bold shadow"
+                style={accentStyle}
+              >
+                {draft.logoInitials || "?"}
+              </div>
+            )}
+            <div className="flex flex-col gap-1.5">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+              >
+                <Upload size={12} /> Upload logo
+              </button>
+              {draft.logoUrl && (
+                <button
+                  onClick={() => setDraft(d => ({ ...d, logoUrl: "" }))}
+                  className="text-xs text-red-500 hover:text-red-400 font-medium"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/svg+xml,image/jpeg,image/webp"
+              className="hidden"
+              onChange={handleLogoFile}
+            />
+          </div>
+        </div>
+
+        {/* Live preview */}
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-4 mb-5">
+          <div className="flex items-center gap-1.5 mb-3">
+            <Eye size={12} className="text-slate-400" />
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Sidebar preview</p>
+          </div>
+          <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-3 w-48">
+            <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800 mb-3">
+              {draft.logoUrl ? (
+                <div className="w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex items-center justify-center overflow-hidden shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={draft.logoUrl} alt="" className="max-w-full max-h-full object-contain" />
+                </div>
+              ) : (
+                <div
+                  className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow"
+                  style={accentStyle}
+                >
+                  {draft.logoInitials || "?"}
+                </div>
+              )}
+              <span className="text-sm font-bold text-slate-900 dark:text-white truncate">{draft.companyName || "Your Brand"}</span>
+            </div>
+            {["Dashboard", "Buildings", "Settings"].map((item, i) => (
+              <div
+                key={item}
+                className={cn(
+                  "flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-medium mb-0.5",
+                  i === 0 ? "text-white" : "text-slate-500 dark:text-slate-400"
+                )}
+                style={i === 0 ? accentStyle : {}}
+              >
+                <div className="w-3 h-3 rounded bg-current opacity-60" />
+                {item}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <button
+          onClick={applyBranding}
+          className={cn(
+            "px-5 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center gap-2",
+            brandingSaved ? "bg-green-500 text-white" : "text-white shadow"
+          )}
+          style={brandingSaved ? {} : accentStyle}
+        >
+          {brandingSaved ? <><CheckCircle2 size={15} /> Branding applied!</> : <><Palette size={15} /> Apply branding</>}
+        </button>
+      </div>
+
       <button
         onClick={save}
         className={cn(
@@ -384,6 +583,14 @@ function SettingsPanel() {
 
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
+const DEFAULT_BRANDING: BrandingConfig = {
+  companyName: "LumiGlow",
+  tagline: "Smart Lighting Console · ACME Corp",
+  accentColor: "#f59e0b",
+  logoUrl: "",
+  logoInitials: "LG",
+};
+
 export default function DashboardPage() {
   const [tab, setTab] = useState<Tab>("overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -395,6 +602,7 @@ export default function DashboardPage() {
     Object.fromEntries(schedules.map(s => [s.id, s.active]))
   );
   const [reportToast, setReportToast] = useState<string | null>(null);
+  const [branding, setBranding] = useState<BrandingConfig>(DEFAULT_BRANDING);
 
   // Zone interactions
   const toggleZone = useCallback((zoneId: string) => {
@@ -468,11 +676,21 @@ export default function DashboardPage() {
       )}>
         {/* Logo */}
         <div className="h-16 flex items-center gap-2.5 px-5 border-b border-slate-100 dark:border-slate-800 shrink-0">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow">
-            <Zap size={15} className="text-white" fill="white" />
-          </div>
-          <span className="text-base font-bold tracking-tight text-slate-900 dark:text-white">
-            Lumi<span className="text-amber-500">Glow</span>
+          {branding.logoUrl ? (
+            <div className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex items-center justify-center overflow-hidden shrink-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={branding.logoUrl} alt="Logo" className="max-w-full max-h-full object-contain" />
+            </div>
+          ) : (
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center shadow shrink-0"
+              style={{ background: `linear-gradient(135deg, ${branding.accentColor}cc, ${branding.accentColor})` }}
+            >
+              <span className="text-white text-[11px] font-bold">{branding.logoInitials}</span>
+            </div>
+          )}
+          <span className="text-base font-bold tracking-tight text-slate-900 dark:text-white truncate">
+            {branding.companyName}
           </span>
         </div>
 
@@ -485,9 +703,10 @@ export default function DashboardPage() {
               className={cn(
                 "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all mb-0.5 text-left",
                 tab === item.id
-                  ? "bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                  ? "text-white"
                   : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
               )}
+              style={tab === item.id ? { backgroundColor: branding.accentColor } : {}}
             >
               {item.icon}
               <span className="flex-1">{item.label}</span>
@@ -540,7 +759,7 @@ export default function DashboardPage() {
           <div>
             <h1 className="text-sm font-bold text-slate-900 dark:text-white capitalize">{tab}</h1>
             <p className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:block">
-              LumiGlow Smart Lighting Console · ACME Corp
+              {branding.tagline}
             </p>
           </div>
 
@@ -928,7 +1147,7 @@ export default function DashboardPage() {
           )}
 
           {/* ── SETTINGS ── */}
-          {tab === "settings" && <SettingsPanel />}
+          {tab === "settings" && <SettingsPanel branding={branding} onBrandingChange={setBranding} />}
 
         </main>
       </div>
