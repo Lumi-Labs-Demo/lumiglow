@@ -194,6 +194,12 @@ export default function Nav({ onDemo }: { onDemo: () => void }) {
               <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Jordan Davis</span>
             </div>
             <Link
+              href="/onboarding"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold border border-amber-400 text-amber-600 dark:text-amber-400 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-all"
+            >
+              Get started
+            </Link>
+            <Link
               href="/dashboard"
               className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-white rounded-lg shadow-sm hover:shadow-amber-400/30 transition-all"
             >
@@ -259,9 +265,16 @@ export default function Nav({ onDemo }: { onDemo: () => void }) {
           </div>
 
           <Link
+            href="/onboarding"
+            onClick={() => setOpen(false)}
+            className="mt-3 flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-semibold border border-amber-400 text-amber-600 dark:text-amber-400 rounded-lg transition-all"
+          >
+            Get started
+          </Link>
+          <Link
             href="/dashboard"
             onClick={() => setOpen(false)}
-            className="mt-3 flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-white rounded-lg transition-all"
+            className="mt-2 flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-white rounded-lg transition-all"
           >
             Go to Dashboard
           </Link>
