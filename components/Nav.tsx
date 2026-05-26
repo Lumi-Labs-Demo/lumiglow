@@ -194,6 +194,12 @@ export default function Nav({ onDemo }: { onDemo: () => void }) {
               <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Jordan Davis</span>
             </div>
             <Link
+              href="/onboarding"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-all"
+            >
+              Setup workspace
+            </Link>
+            <Link
               href="/dashboard"
               className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-white rounded-lg shadow-sm hover:shadow-amber-400/30 transition-all"
             >
