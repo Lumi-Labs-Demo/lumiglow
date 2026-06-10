@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
 import {
   Zap, LayoutDashboard, Building2, Bell, Calendar,
@@ -10,6 +10,7 @@ import {
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
   Palette, Upload, Eye, Plug, RefreshCw, ArrowLeftRight,
   Database, Globe, Link2, AlertCircle, Clock,
+  GripVertical, Plus, EyeOff, Pencil, Check, LayoutGrid,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -33,6 +34,42 @@ interface BrandingConfig {
   logoUrl: string;
   logoInitials: string;
 }
+
+// ─── Widget catalog ───────────────────────────────────────────────────────────
+
+type WidgetId =
+  | "kpi-row"
+  | "energy-chart"
+  | "recent-alerts"
+  | "buildings-summary"
+  | "schedules-summary"
+  | "reports-summary";
+
+interface WidgetDef {
+  id: WidgetId;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+}
+
+const WIDGET_CATALOG: WidgetDef[] = [
+  { id: "kpi-row",           label: "KPI Summary",        description: "Buildings, zones, power draw & savings",  icon: <Activity size={16} />   },
+  { id: "energy-chart",      label: "Energy Usage Chart",  description: "Hourly kWh vs baseline for all buildings", icon: <BarChart3 size={16} />  },
+  { id: "recent-alerts",     label: "Recent Alerts",       description: "Latest critical & warning events",         icon: <Bell size={16} />       },
+  { id: "buildings-summary", label: "Buildings Summary",   description: "Per-building zone & power overview",       icon: <Building2 size={16} />  },
+  { id: "schedules-summary", label: "Active Schedules",    description: "Quick view of your lighting schedules",    icon: <Calendar size={16} />   },
+  { id: "reports-summary",   label: "Reports Snapshot",    description: "Key metrics from the latest reports",      icon: <ShieldCheck size={16} /> },
+];
+
+const DEFAULT_WIDGET_ORDER: WidgetId[] = [
+  "kpi-row",
+  "energy-chart",
+  "recent-alerts",
+  "buildings-summary",
+];
+
+const LS_ORDER_KEY  = "lg_widget_order";
+const LS_HIDDEN_KEY = "lg_widget_hidden";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -58,7 +95,6 @@ function EnergyChart() {
   const chartH = H - padT - padB;
 
   const maxY = Math.max(...energyData.map(d => Math.max(d.kWh, d.baseline))) * 1.15;
-
   const xStep = chartW / (energyData.length - 1);
 
   function px(i: number) { return padL + i * xStep; }
@@ -66,7 +102,6 @@ function EnergyChart() {
 
   const kwhPath = energyData.map((d, i) => `${i === 0 ? "M" : "L"}${px(i).toFixed(1)},${py(d.kWh).toFixed(1)}`).join(" ");
   const basePath = energyData.map((d, i) => `${i === 0 ? "M" : "L"}${px(i).toFixed(1)},${py(d.baseline).toFixed(1)}`).join(" ");
-
   const fillPath = kwhPath + ` L${px(energyData.length - 1).toFixed(1)},${(padT + chartH).toFixed(1)} L${padL},${(padT + chartH).toFixed(1)} Z`;
 
   return (
@@ -83,8 +118,6 @@ function EnergyChart() {
             <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.02" />
           </linearGradient>
         </defs>
-
-        {/* Grid lines */}
         {[0, 0.25, 0.5, 0.75, 1].map(t => {
           const y = padT + chartH * (1 - t);
           return (
@@ -96,17 +129,9 @@ function EnergyChart() {
             </g>
           );
         })}
-
-        {/* Baseline */}
         <path d={basePath} fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeDasharray="4 3" />
-
-        {/* kWh fill */}
         <path d={fillPath} fill="url(#kwhGrad)" />
-
-        {/* kWh line */}
         <path d={kwhPath} fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-
-        {/* X labels */}
         {energyData.map((d, i) => (
           i % 2 === 0 && (
             <text key={i} x={px(i)} y={H - 6} textAnchor="middle" fontSize="9" fill="currentColor" fillOpacity="0.45" className="text-slate-500">
@@ -114,32 +139,15 @@ function EnergyChart() {
             </text>
           )
         ))}
-
-        {/* Hover areas */}
         {energyData.map((d, i) => (
           <g key={i} onMouseEnter={() => setHovered(i)}>
-            <rect
-              x={px(i) - xStep / 2}
-              y={padT}
-              width={xStep}
-              height={chartH}
-              fill="transparent"
-            />
+            <rect x={px(i) - xStep / 2} y={padT} width={xStep} height={chartH} fill="transparent" />
             {hovered === i && (
               <>
                 <line x1={px(i)} y1={padT} x2={px(i)} y2={padT + chartH} stroke="#f59e0b" strokeWidth="1" strokeOpacity="0.5" />
                 <circle cx={px(i)} cy={py(d.kWh)} r="4" fill="#f59e0b" stroke="white" strokeWidth="1.5" />
                 <circle cx={px(i)} cy={py(d.baseline)} r="3" fill="#94a3b8" stroke="white" strokeWidth="1.5" />
-                {/* Tooltip */}
-                <rect
-                  x={Math.min(px(i) - 38, W - padR - 80)}
-                  y={py(d.kWh) - 46}
-                  width={78}
-                  height={42}
-                  rx="5"
-                  fill="#1e293b"
-                  fillOpacity="0.95"
-                />
+                <rect x={Math.min(px(i) - 38, W - padR - 80)} y={py(d.kWh) - 46} width={78} height={42} rx="5" fill="#1e293b" fillOpacity="0.95" />
                 <text x={Math.min(px(i) - 38, W - padR - 80) + 7} y={py(d.kWh) - 32} fontSize="10" fill="#f59e0b" fontWeight="600">{d.hour}</text>
                 <text x={Math.min(px(i) - 38, W - padR - 80) + 7} y={py(d.kWh) - 19} fontSize="9" fill="white">{`Usage: ${d.kWh} kWh`}</text>
                 <text x={Math.min(px(i) - 38, W - padR - 80) + 7} y={py(d.kWh) - 8} fontSize="9" fill="#94a3b8">{`Baseline: ${d.baseline} kWh`}</text>
@@ -148,8 +156,6 @@ function EnergyChart() {
           </g>
         ))}
       </svg>
-
-      {/* Legend */}
       <div className="flex items-center gap-4 mt-1 px-1">
         <div className="flex items-center gap-1.5">
           <div className="w-6 h-0.5 bg-amber-400 rounded" />
@@ -178,7 +184,6 @@ function ZoneRow({ zone, onToggle, onBrightness }: {
         ? "bg-amber-50 dark:bg-amber-500/5 border-amber-200/60 dark:border-amber-500/20"
         : "bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700/50"
     )}>
-      {/* Toggle */}
       <button
         onClick={() => onToggle(zone.id)}
         className={cn("shrink-0 transition-colors", zone.isOn ? "text-amber-500" : "text-slate-400 dark:text-slate-600")}
@@ -186,8 +191,6 @@ function ZoneRow({ zone, onToggle, onBrightness }: {
       >
         {zone.isOn ? <ToggleRight size={26} /> : <ToggleLeft size={26} />}
       </button>
-
-      {/* Name & meta */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className={cn("text-sm font-semibold truncate", zone.isOn ? "text-slate-900 dark:text-white" : "text-slate-400 dark:text-slate-500")}>
@@ -206,16 +209,10 @@ function ZoneRow({ zone, onToggle, onBrightness }: {
           {zone.lastChangedBy} · {zone.lastChangedAt}
         </p>
       </div>
-
-      {/* Brightness */}
       <div className="hidden sm:flex items-center gap-2 w-32 shrink-0">
         <Sun size={12} className={cn("shrink-0", zone.isOn ? "text-amber-400" : "text-slate-300 dark:text-slate-600")} />
         <input
-          type="range"
-          min={0}
-          max={100}
-          value={zone.brightness}
-          disabled={!zone.isOn}
+          type="range" min={0} max={100} value={zone.brightness} disabled={!zone.isOn}
           onChange={e => onBrightness(zone.id, Number(e.target.value))}
           className={cn("flex-1 h-1.5 rounded-full appearance-none cursor-pointer accent-amber-400", !zone.isOn && "opacity-30 cursor-not-allowed")}
         />
@@ -223,8 +220,6 @@ function ZoneRow({ zone, onToggle, onBrightness }: {
           {zone.brightness}%
         </span>
       </div>
-
-      {/* Watts */}
       <div className="shrink-0 text-right">
         <span className={cn("text-sm font-bold tabular-nums", zone.isOn ? "text-slate-800 dark:text-slate-200" : "text-slate-300 dark:text-slate-600")}>
           {zone.powerWatts}W
@@ -280,6 +275,161 @@ const reports = [
   { id: "r4", name: "Zone Uptime Report",     scope: "West Campus",   generated: "Apr 28, 2025",  size: "56 KB"  },
   { id: "r5", name: "Firmware Inventory",     scope: "All buildings", generated: "Apr 25, 2025",  size: "34 KB"  },
 ];
+
+// ─── Widget Shell (edit-mode wrapper) ─────────────────────────────────────────
+
+function WidgetShell({
+  id, label, editMode, isFirst, isLast,
+  onMoveUp, onMoveDown, onHide,
+  dragHandleProps,
+  children,
+}: {
+  id: WidgetId;
+  label: string;
+  editMode: boolean;
+  isFirst: boolean;
+  isLast: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onHide: () => void;
+  dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
+  children: React.ReactNode;
+}) {
+  if (!editMode) return <>{children}</>;
+
+  return (
+    <div className="relative group rounded-2xl ring-2 ring-amber-400/50 ring-offset-2 ring-offset-slate-100 dark:ring-offset-slate-950">
+      {/* Edit toolbar */}
+      <div className="absolute -top-3 left-3 right-3 flex items-center justify-between z-10 pointer-events-none">
+        <div className="flex items-center gap-1 pointer-events-auto">
+          {/* Drag handle */}
+          <div
+            {...dragHandleProps}
+            className="flex items-center gap-1 bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full cursor-grab active:cursor-grabbing shadow select-none"
+            title="Drag to reorder"
+          >
+            <GripVertical size={11} />
+            <span className="hidden sm:inline">{label}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1 pointer-events-auto">
+          <button
+            onClick={onMoveUp}
+            disabled={isFirst}
+            className="w-6 h-6 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed shadow-sm transition-colors"
+            aria-label="Move up"
+          >
+            <ChevronUp size={12} />
+          </button>
+          <button
+            onClick={onMoveDown}
+            disabled={isLast}
+            className="w-6 h-6 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed shadow-sm transition-colors"
+            aria-label="Move down"
+          >
+            <ChevronDown size={12} />
+          </button>
+          <button
+            onClick={onHide}
+            className="w-6 h-6 rounded-full bg-white dark:bg-slate-800 border border-red-200 dark:border-red-500/30 flex items-center justify-center text-red-400 hover:text-red-600 shadow-sm transition-colors"
+            aria-label="Hide widget"
+          >
+            <EyeOff size={11} />
+          </button>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ─── Widget Catalog Modal ─────────────────────────────────────────────────────
+
+function WidgetCatalogModal({
+  hiddenWidgets,
+  onAdd,
+  onClose,
+}: {
+  hiddenWidgets: Set<WidgetId>;
+  onAdd: (id: WidgetId) => void;
+  onClose: () => void;
+}) {
+  const available = WIDGET_CATALOG.filter(w => hiddenWidgets.has(w.id));
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md">
+        <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-2">
+            <LayoutGrid size={16} className="text-amber-500" />
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white">Add Widget</h2>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="p-4">
+          {available.length === 0 ? (
+            <div className="text-center py-8">
+              <CheckCircle2 size={28} className="text-green-500 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">All widgets are on your dashboard!</p>
+              <p className="text-xs text-slate-400 mt-1">Hide a widget first to make room.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-xs text-slate-400 dark:text-slate-500 mb-3">
+                {available.length} widget{available.length !== 1 ? "s" : ""} available to add
+              </p>
+              {available.map(w => (
+                <div
+                  key={w.id}
+                  className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 hover:border-amber-300 dark:hover:border-amber-500/40 transition-colors group"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
+                    {w.icon}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{w.label}</p>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">{w.description}</p>
+                  </div>
+                  <button
+                    onClick={() => { onAdd(w.id); }}
+                    className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-white transition-colors shrink-0 shadow-sm"
+                  >
+                    <Plus size={12} /> Add
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Empty State ──────────────────────────────────────────────────────────────
+
+function EmptyDashboard({ onAddWidget }: { onAddWidget: () => void }) {
+  return (
+    <div className="rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-12 text-center">
+      <div className="w-14 h-14 rounded-2xl bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center mx-auto mb-4">
+        <LayoutGrid size={24} className="text-amber-500" />
+      </div>
+      <h3 className="text-base font-bold text-slate-900 dark:text-white mb-2">Your dashboard is empty</h3>
+      <p className="text-sm text-slate-500 dark:text-slate-400 max-w-xs mx-auto mb-5">
+        Add widgets from the catalog to personalize your overview. Your layout is saved automatically.
+      </p>
+      <button
+        onClick={onAddWidget}
+        className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-white rounded-xl shadow transition-colors"
+      >
+        <Plus size={15} /> Browse widget catalog
+      </button>
+    </div>
+  );
+}
 
 // ─── Settings Panel ───────────────────────────────────────────────────────────
 
@@ -415,8 +565,6 @@ function SettingsPanel({
           <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Custom Branding</h3>
           <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400">Enterprise</span>
         </div>
-
-        {/* Company name + tagline */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
           <div>
             <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Company name</label>
@@ -446,8 +594,6 @@ function SettingsPanel({
             />
           </div>
         </div>
-
-        {/* Accent color */}
         <div className="mb-4">
           <label className="text-xs text-slate-500 dark:text-slate-400 mb-2 block">Primary accent color</label>
           <div className="flex items-center gap-3 flex-wrap">
@@ -474,8 +620,6 @@ function SettingsPanel({
             </div>
           </div>
         </div>
-
-        {/* Logo upload */}
         <div className="mb-5">
           <label className="text-xs text-slate-500 dark:text-slate-400 mb-2 block">Logo (PNG or SVG)</label>
           <div className="flex items-center gap-3">
@@ -485,10 +629,7 @@ function SettingsPanel({
                 <img src={draft.logoUrl} alt="Logo preview" className="max-w-full max-h-full object-contain" />
               </div>
             ) : (
-              <div
-                className="w-12 h-12 rounded-xl flex items-center justify-center text-white text-sm font-bold shadow"
-                style={accentStyle}
-              >
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white text-sm font-bold shadow" style={accentStyle}>
                 {draft.logoInitials || "?"}
               </div>
             )}
@@ -500,25 +641,14 @@ function SettingsPanel({
                 <Upload size={12} /> Upload logo
               </button>
               {draft.logoUrl && (
-                <button
-                  onClick={() => setDraft(d => ({ ...d, logoUrl: "" }))}
-                  className="text-xs text-red-500 hover:text-red-400 font-medium"
-                >
+                <button onClick={() => setDraft(d => ({ ...d, logoUrl: "" }))} className="text-xs text-red-500 hover:text-red-400 font-medium">
                   Remove
                 </button>
               )}
             </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/svg+xml,image/jpeg,image/webp"
-              className="hidden"
-              onChange={handleLogoFile}
-            />
+            <input ref={fileInputRef} type="file" accept="image/png,image/svg+xml,image/jpeg,image/webp" className="hidden" onChange={handleLogoFile} />
           </div>
         </div>
-
-        {/* Live preview */}
         <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-4 mb-5">
           <div className="flex items-center gap-1.5 mb-3">
             <Eye size={12} className="text-slate-400" />
@@ -532,10 +662,7 @@ function SettingsPanel({
                   <img src={draft.logoUrl} alt="" className="max-w-full max-h-full object-contain" />
                 </div>
               ) : (
-                <div
-                  className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow"
-                  style={accentStyle}
-                >
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow" style={accentStyle}>
                   {draft.logoInitials || "?"}
                 </div>
               )}
@@ -544,10 +671,7 @@ function SettingsPanel({
             {["Dashboard", "Buildings", "Settings"].map((item, i) => (
               <div
                 key={item}
-                className={cn(
-                  "flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-medium mb-0.5",
-                  i === 0 ? "text-white" : "text-slate-500 dark:text-slate-400"
-                )}
+                className={cn("flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-medium mb-0.5", i === 0 ? "text-white" : "text-slate-500 dark:text-slate-400")}
                 style={i === 0 ? accentStyle : {}}
               >
                 <div className="w-3 h-3 rounded bg-current opacity-60" />
@@ -556,13 +680,9 @@ function SettingsPanel({
             ))}
           </div>
         </div>
-
         <button
           onClick={applyBranding}
-          className={cn(
-            "px-5 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center gap-2",
-            brandingSaved ? "bg-green-500 text-white" : "text-white shadow"
-          )}
+          className={cn("px-5 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center gap-2", brandingSaved ? "bg-green-500 text-white" : "text-white shadow")}
           style={brandingSaved ? {} : accentStyle}
         >
           {brandingSaved ? <><CheckCircle2 size={15} /> Branding applied!</> : <><Palette size={15} /> Apply branding</>}
@@ -571,10 +691,7 @@ function SettingsPanel({
 
       <button
         onClick={save}
-        className={cn(
-          "px-6 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center gap-2",
-          saved ? "bg-green-500 text-white" : "bg-amber-500 hover:bg-amber-400 text-white shadow hover:shadow-amber-400/30"
-        )}
+        className={cn("px-6 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center gap-2", saved ? "bg-green-500 text-white" : "bg-amber-500 hover:bg-amber-400 text-white shadow hover:shadow-amber-400/30")}
       >
         {saved ? <><CheckCircle2 size={15} /> Saved!</> : "Save changes"}
       </button>
@@ -622,8 +739,6 @@ function IntegrationsPanel() {
 
   return (
     <div className="max-w-2xl space-y-6">
-
-      {/* ── Connection Card ── */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
         <div className="flex items-center gap-3 mb-5">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: "#ff7a59" }}>
@@ -645,7 +760,6 @@ function IntegrationsPanel() {
             </span>
           )}
         </div>
-
         {!connected ? (
           <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 p-4 mb-4">
             <p className="text-xs text-slate-600 dark:text-slate-300 mb-3">
@@ -677,10 +791,7 @@ function IntegrationsPanel() {
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">acme-corp.hubspot.com</p>
                 <p className="text-[11px] text-slate-400 mt-0.5">OAuth token active · Expires in 58 days</p>
               </div>
-              <button
-                onClick={() => setConnected(false)}
-                className="text-[11px] text-red-500 hover:text-red-400 font-medium shrink-0"
-              >
+              <button onClick={() => setConnected(false)} className="text-[11px] text-red-500 hover:text-red-400 font-medium shrink-0">
                 Disconnect
               </button>
             </div>
@@ -696,7 +807,6 @@ function IntegrationsPanel() {
         )}
       </div>
 
-      {/* ── Sync Settings ── */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-5">
           <ArrowLeftRight size={15} className="text-amber-500" />
@@ -711,10 +821,7 @@ function IntegrationsPanel() {
               <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{row.label}</p>
               <p className="text-xs text-slate-400 dark:text-slate-500">{row.sub}</p>
             </div>
-            <button
-              onClick={() => row.set(!row.val)}
-              className={cn("transition-colors shrink-0 ml-4", row.val ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}
-            >
+            <button onClick={() => row.set(!row.val)} className={cn("transition-colors shrink-0 ml-4", row.val ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>
               {row.val ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
             </button>
           </div>
@@ -735,7 +842,6 @@ function IntegrationsPanel() {
         </div>
       </div>
 
-      {/* ── Field Mapping ── */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-5">
           <Database size={15} className="text-amber-500" />
@@ -776,7 +882,6 @@ function IntegrationsPanel() {
         </div>
       </div>
 
-      {/* ── Sync Activity Log ── */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
           <Clock size={15} className="text-amber-500" />
@@ -785,10 +890,7 @@ function IntegrationsPanel() {
         <div className="space-y-2">
           {SYNC_LOG.map((l, i) => (
             <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
-              {l.ok
-                ? <CheckCircle2 size={13} className="text-green-500 shrink-0" />
-                : <AlertCircle size={13} className="text-red-500 shrink-0" />
-              }
+              {l.ok ? <CheckCircle2 size={13} className="text-green-500 shrink-0" /> : <AlertCircle size={13} className="text-red-500 shrink-0" />}
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{l.event}</p>
                 {l.count && <p className="text-[11px] text-slate-400 mt-0.5">{l.count}</p>}
@@ -832,7 +934,108 @@ export default function DashboardPage() {
   const [reportToast, setReportToast] = useState<string | null>(null);
   const [branding, setBranding] = useState<BrandingConfig>(DEFAULT_BRANDING);
 
-  // Zone interactions
+  // ── Personalized dashboard state ──────────────────────────────────────────
+  const [widgetOrder, setWidgetOrder] = useState<WidgetId[]>(DEFAULT_WIDGET_ORDER);
+  const [hiddenWidgets, setHiddenWidgets] = useState<Set<WidgetId>>(new Set());
+  const [editMode, setEditMode] = useState(false);
+  const [showCatalog, setShowCatalog] = useState(false);
+
+  // Drag-and-drop state
+  const dragIndexRef = useRef<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  // Load persisted layout from localStorage
+  useEffect(() => {
+    try {
+      const savedOrder = localStorage.getItem(LS_ORDER_KEY);
+      const savedHidden = localStorage.getItem(LS_HIDDEN_KEY);
+      if (savedOrder) {
+        const parsed = JSON.parse(savedOrder) as WidgetId[];
+        const known = new Set(WIDGET_CATALOG.map(w => w.id));
+        const valid = parsed.filter(id => known.has(id));
+        if (valid.length > 0) setWidgetOrder(valid);
+      }
+      if (savedHidden) {
+        const parsed = JSON.parse(savedHidden) as WidgetId[];
+        setHiddenWidgets(new Set(parsed));
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  // Persist layout whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_ORDER_KEY, JSON.stringify(widgetOrder));
+    } catch { /* ignore */ }
+  }, [widgetOrder]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_HIDDEN_KEY, JSON.stringify([...hiddenWidgets]));
+    } catch { /* ignore */ }
+  }, [hiddenWidgets]);
+
+  // ── Widget manipulation ────────────────────────────────────────────────────
+
+  const hideWidget = useCallback((id: WidgetId) => {
+    setHiddenWidgets(prev => new Set([...prev, id]));
+  }, []);
+
+  const addWidget = useCallback((id: WidgetId) => {
+    setHiddenWidgets(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    setWidgetOrder(prev => prev.includes(id) ? prev : [...prev, id]);
+    setShowCatalog(false);
+  }, []);
+
+  const moveWidget = useCallback((fromIdx: number, toIdx: number) => {
+    setWidgetOrder(prev => {
+      const next = [...prev];
+      const [item] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, item);
+      return next;
+    });
+  }, []);
+
+  const moveUp = useCallback((visibleIdx: number) => {
+    if (visibleIdx === 0) return;
+    moveWidget(visibleIdx, visibleIdx - 1);
+  }, [moveWidget]);
+
+  const moveDown = useCallback((visibleIdx: number, total: number) => {
+    if (visibleIdx >= total - 1) return;
+    moveWidget(visibleIdx, visibleIdx + 1);
+  }, [moveWidget]);
+
+  // Drag handlers
+  const handleDragStart = useCallback((idx: number) => {
+    dragIndexRef.current = idx;
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    setDragOverIndex(idx);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, toIdx: number) => {
+    e.preventDefault();
+    const from = dragIndexRef.current;
+    if (from !== null && from !== toIdx) {
+      moveWidget(from, toIdx);
+    }
+    dragIndexRef.current = null;
+    setDragOverIndex(null);
+  }, [moveWidget]);
+
+  const handleDragEnd = useCallback(() => {
+    dragIndexRef.current = null;
+    setDragOverIndex(null);
+  }, []);
+
+  // ── Zone interactions ──────────────────────────────────────────────────────
   const toggleZone = useCallback((zoneId: string) => {
     setBuildings(prev => prev.map(b => ({
       ...b,
@@ -894,6 +1097,207 @@ export default function DashboardPage() {
       z.buildingName.toLowerCase().includes(searchQ.toLowerCase())
     );
 
+  // Visible ordered widgets
+  const visibleWidgets = widgetOrder.filter(id => !hiddenWidgets.has(id));
+
+  // ── Render a single widget by id ──────────────────────────────────────────
+  function renderWidget(widgetId: WidgetId, visIdx: number) {
+    const isFirst = visIdx === 0;
+    const isLast = visIdx === visibleWidgets.length - 1;
+    const def = WIDGET_CATALOG.find(w => w.id === widgetId)!;
+    const isDragOver = dragOverIndex === visIdx;
+
+    const shellProps = {
+      id: widgetId,
+      label: def.label,
+      editMode,
+      isFirst,
+      isLast,
+      onMoveUp: () => moveUp(visIdx),
+      onMoveDown: () => moveDown(visIdx, visibleWidgets.length),
+      onHide: () => hideWidget(widgetId),
+      dragHandleProps: editMode ? {
+        draggable: true,
+        onDragStart: () => handleDragStart(visIdx),
+      } as React.HTMLAttributes<HTMLDivElement> : undefined,
+    };
+
+    const dropZone = editMode ? {
+      onDragOver: (e: React.DragEvent) => handleDragOver(e, visIdx),
+      onDrop: (e: React.DragEvent) => handleDrop(e, visIdx),
+      onDragEnd: handleDragEnd,
+      className: cn(
+        "transition-all",
+        isDragOver && "ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-100 dark:ring-offset-slate-950 rounded-2xl"
+      ),
+    } : {};
+
+    if (widgetId === "kpi-row") {
+      return (
+        <div key={widgetId} {...dropZone}>
+          <WidgetShell {...shellProps}>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <KpiCard label="Buildings online" value={String(buildings.length)} sub="All systems normal" icon={<Building2 size={18} className="text-sky-600 dark:text-sky-400" />} accent="bg-sky-100 dark:bg-sky-500/20" />
+              <KpiCard label="Zones active" value={`${zonesOn(buildings)} / ${totalZones(buildings)}`} sub="Across all floors" icon={<Zap size={18} className="text-amber-600 dark:text-amber-400" />} accent="bg-amber-100 dark:bg-amber-500/20" />
+              <KpiCard label="Live power draw" value={`${(watts / 1000).toFixed(1)} kW`} sub={`~${kwhEst} kWh est. today`} icon={<Activity size={18} className="text-violet-600 dark:text-violet-400" />} accent="bg-violet-100 dark:bg-violet-500/20" />
+              <KpiCard label="Energy savings" value={`${savings}%`} sub="vs. last-year baseline" icon={<TrendingDown size={18} className="text-green-600 dark:text-green-400" />} accent="bg-green-100 dark:bg-green-500/20" />
+            </div>
+          </WidgetShell>
+        </div>
+      );
+    }
+
+    if (widgetId === "energy-chart") {
+      return (
+        <div key={widgetId} {...dropZone}>
+          <WidgetShell {...shellProps}>
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-white">Energy usage today</h2>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">All buildings · kWh per hour</p>
+                </div>
+                <span className="text-xs font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2.5 py-1 rounded-full">
+                  ↓ {savings}% vs baseline
+                </span>
+              </div>
+              <EnergyChart />
+            </div>
+          </WidgetShell>
+        </div>
+      );
+    }
+
+    if (widgetId === "recent-alerts") {
+      return (
+        <div key={widgetId} {...dropZone}>
+          <WidgetShell {...shellProps}>
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">Recent alerts</h2>
+                <button onClick={() => setTab("alerts")} className="text-xs text-amber-500 hover:text-amber-400 font-semibold">View all →</button>
+              </div>
+              <div className="space-y-2">
+                {alertList.slice(0, 4).map(a => (
+                  <div key={a.id} className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                    <AlertBadge severity={a.severity} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-slate-700 dark:text-slate-300 font-medium truncate">{a.message}</p>
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{a.zone} · {a.ts}</p>
+                    </div>
+                  </div>
+                ))}
+                {alertList.length === 0 && <p className="text-sm text-slate-400 text-center py-4">All clear 🎉</p>}
+              </div>
+            </div>
+          </WidgetShell>
+        </div>
+      );
+    }
+
+    if (widgetId === "buildings-summary") {
+      return (
+        <div key={widgetId} {...dropZone}>
+          <WidgetShell {...shellProps}>
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">Buildings</h2>
+                <button onClick={() => setTab("buildings")} className="text-xs text-amber-500 hover:text-amber-400 font-semibold">Manage →</button>
+              </div>
+              <div className="space-y-2">
+                {buildings.map(b => {
+                  const bZones = b.floors.flatMap(f => f.zones);
+                  const on = bZones.filter(z => z.isOn).length;
+                  const bWatts = bZones.reduce((s, z) => s + z.powerWatts, 0);
+                  return (
+                    <div key={b.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                      <Building2 size={15} className="text-slate-400 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{b.name}</p>
+                        <p className="text-[11px] text-slate-400 dark:text-slate-500">{b.location}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-xs font-bold text-slate-800 dark:text-white">{on}/{bZones.length} on</p>
+                        <p className="text-[11px] text-slate-400">{(bWatts / 1000).toFixed(1)} kW</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </WidgetShell>
+        </div>
+      );
+    }
+
+    if (widgetId === "schedules-summary") {
+      const active = schedules.filter(s => scheduleActive[s.id]);
+      return (
+        <div key={widgetId} {...dropZone}>
+          <WidgetShell {...shellProps}>
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">Active schedules</h2>
+                <button onClick={() => setTab("schedules")} className="text-xs text-amber-500 hover:text-amber-400 font-semibold">View all →</button>
+              </div>
+              <div className="space-y-2">
+                {active.slice(0, 4).map(s => (
+                  <div key={s.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                    <Calendar size={13} className="text-amber-500 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{s.name}</p>
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate">{s.scope} · {s.time}</p>
+                    </div>
+                    <span className={cn(
+                      "shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full",
+                      s.mode === "auto" ? "bg-sky-100 text-sky-600 dark:bg-sky-500/20 dark:text-sky-400" :
+                      s.mode === "manual" ? "bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-400" :
+                      "bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400"
+                    )}>{s.mode}</span>
+                  </div>
+                ))}
+                {active.length === 0 && <p className="text-sm text-slate-400 text-center py-4">No active schedules</p>}
+              </div>
+            </div>
+          </WidgetShell>
+        </div>
+      );
+    }
+
+    if (widgetId === "reports-summary") {
+      return (
+        <div key={widgetId} {...dropZone}>
+          <WidgetShell {...shellProps}>
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">Reports snapshot</h2>
+                <button onClick={() => setTab("reports")} className="text-xs text-amber-500 hover:text-amber-400 font-semibold">View all →</button>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: "Avg daily kWh", value: "82.4", icon: <Activity size={13} className="text-amber-500" /> },
+                  { label: "Monthly savings", value: "$4,210", icon: <TrendingDown size={13} className="text-green-500" /> },
+                  { label: "CO₂ offset", value: "2.1 t", icon: <ShieldCheck size={13} className="text-sky-500" /> },
+                  { label: "Zones managed", value: String(totalZones(buildings)), icon: <Users size={13} className="text-violet-500" /> },
+                ].map(s => (
+                  <div key={s.label} className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 p-3 flex items-center gap-2.5">
+                    <div className="shrink-0">{s.icon}</div>
+                    <div>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500">{s.label}</p>
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">{s.value}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </WidgetShell>
+        </div>
+      );
+    }
+
+    return null;
+  }
+
   return (
     <div className="flex h-screen bg-slate-100 dark:bg-slate-950 overflow-hidden font-sans">
 
@@ -903,7 +1307,6 @@ export default function DashboardPage() {
         "md:relative md:translate-x-0",
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
-        {/* Logo */}
         <div className="h-16 flex items-center gap-2.5 px-5 border-b border-slate-100 dark:border-slate-800 shrink-0">
           {branding.logoUrl ? (
             <div className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex items-center justify-center overflow-hidden shrink-0">
@@ -923,7 +1326,6 @@ export default function DashboardPage() {
           </span>
         </div>
 
-        {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-3 px-3">
           {navItems.map(item => (
             <button
@@ -948,7 +1350,6 @@ export default function DashboardPage() {
           ))}
         </nav>
 
-        {/* User footer */}
         <div className="p-3 border-t border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer">
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
@@ -965,12 +1366,8 @@ export default function DashboardPage() {
         </div>
       </aside>
 
-      {/* Sidebar overlay on mobile */}
       {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-30 bg-black/40 md:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
+        <div className="fixed inset-0 z-30 bg-black/40 md:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
       {/* ── Main ── */}
@@ -978,23 +1375,14 @@ export default function DashboardPage() {
 
         {/* Top bar */}
         <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3 px-4 sm:px-6 shrink-0 z-20">
-          <button
-            className="md:hidden p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
-            onClick={() => setSidebarOpen(true)}
-          >
+          <button className="md:hidden p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => setSidebarOpen(true)}>
             <Menu size={20} />
           </button>
-
           <div>
             <h1 className="text-sm font-bold text-slate-900 dark:text-white capitalize">{tab}</h1>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:block">
-              {branding.tagline}
-            </p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:block">{branding.tagline}</p>
           </div>
-
           <div className="flex-1" />
-
-          {/* Search */}
           <div className="hidden sm:flex items-center gap-2 bg-slate-100 dark:bg-slate-800 rounded-xl px-3 py-2 w-48">
             <Search size={13} className="text-slate-400 shrink-0" />
             <input
@@ -1004,11 +1392,7 @@ export default function DashboardPage() {
               className="bg-transparent text-xs text-slate-700 dark:text-slate-300 placeholder-slate-400 outline-none w-full"
             />
           </div>
-
-          {/* Theme toggle */}
           <ThemeToggle />
-
-          {/* Notification bell */}
           <button
             onClick={() => setTab("alerts")}
             className="relative p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
@@ -1023,111 +1407,64 @@ export default function DashboardPage() {
         {/* Content */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">
 
-          {/* ── OVERVIEW ── */}
+          {/* ── OVERVIEW (Personalized) ── */}
           {tab === "overview" && (
             <div className="space-y-6">
-              {/* KPIs */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <KpiCard
-                  label="Buildings online"
-                  value={String(buildings.length)}
-                  sub="All systems normal"
-                  icon={<Building2 size={18} className="text-sky-600 dark:text-sky-400" />}
-                  accent="bg-sky-100 dark:bg-sky-500/20"
-                />
-                <KpiCard
-                  label="Zones active"
-                  value={`${zonesOn(buildings)} / ${totalZones(buildings)}`}
-                  sub="Across all floors"
-                  icon={<Zap size={18} className="text-amber-600 dark:text-amber-400" />}
-                  accent="bg-amber-100 dark:bg-amber-500/20"
-                />
-                <KpiCard
-                  label="Live power draw"
-                  value={`${(watts / 1000).toFixed(1)} kW`}
-                  sub={`~${kwhEst} kWh est. today`}
-                  icon={<Activity size={18} className="text-violet-600 dark:text-violet-400" />}
-                  accent="bg-violet-100 dark:bg-violet-500/20"
-                />
-                <KpiCard
-                  label="Energy savings"
-                  value={`${savings}%`}
-                  sub="vs. last-year baseline"
-                  icon={<TrendingDown size={18} className="text-green-600 dark:text-green-400" />}
-                  accent="bg-green-100 dark:bg-green-500/20"
-                />
-              </div>
 
-              {/* Chart */}
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h2 className="text-sm font-bold text-slate-900 dark:text-white">Energy usage today</h2>
-                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">All buildings · kWh per hour</p>
-                  </div>
-                  <span className="text-xs font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2.5 py-1 rounded-full">
-                    ↓ {savings}% vs baseline
-                  </span>
+              {/* Dashboard toolbar */}
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-white">Overview</h2>
+                  {editMode && (
+                    <p className="text-[11px] text-amber-500 mt-0.5">
+                      Drag widgets to reorder · Use ↑↓ buttons · Hide with 👁 button
+                    </p>
+                  )}
                 </div>
-                <EnergyChart />
-              </div>
-
-              {/* Alerts preview & buildings summary */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* Recent alerts */}
-                <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-sm font-bold text-slate-900 dark:text-white">Recent alerts</h2>
-                    <button onClick={() => setTab("alerts")} className="text-xs text-amber-500 hover:text-amber-400 font-semibold">
-                      View all →
+                <div className="flex items-center gap-2">
+                  {editMode && (
+                    <button
+                      onClick={() => setShowCatalog(true)}
+                      className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-white transition-colors shadow-sm"
+                    >
+                      <Plus size={13} /> Add widget
                     </button>
-                  </div>
-                  <div className="space-y-2">
-                    {alertList.slice(0, 4).map(a => (
-                      <div key={a.id} className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
-                        <AlertBadge severity={a.severity} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs text-slate-700 dark:text-slate-300 font-medium truncate">{a.message}</p>
-                          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{a.zone} · {a.ts}</p>
-                        </div>
-                      </div>
-                    ))}
-                    {alertList.length === 0 && (
-                      <p className="text-sm text-slate-400 text-center py-4">All clear 🎉</p>
+                  )}
+                  <button
+                    onClick={() => setEditMode(e => !e)}
+                    className={cn(
+                      "flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors",
+                      editMode
+                        ? "bg-green-500 hover:bg-green-400 text-white border-transparent shadow-sm"
+                        : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
                     )}
-                  </div>
-                </div>
-
-                {/* Buildings summary */}
-                <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-sm font-bold text-slate-900 dark:text-white">Buildings</h2>
-                    <button onClick={() => setTab("buildings")} className="text-xs text-amber-500 hover:text-amber-400 font-semibold">
-                      Manage →
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {buildings.map(b => {
-                      const bZones = b.floors.flatMap(f => f.zones);
-                      const on = bZones.filter(z => z.isOn).length;
-                      const bWatts = bZones.reduce((s, z) => s + z.powerWatts, 0);
-                      return (
-                        <div key={b.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
-                          <Building2 size={15} className="text-slate-400 shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{b.name}</p>
-                            <p className="text-[11px] text-slate-400 dark:text-slate-500">{b.location}</p>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <p className="text-xs font-bold text-slate-800 dark:text-white">{on}/{bZones.length} on</p>
-                            <p className="text-[11px] text-slate-400">{(bWatts / 1000).toFixed(1)} kW</p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  >
+                    {editMode ? <><Check size={13} /> Done</> : <><Pencil size={13} /> Customize</>}
+                  </button>
                 </div>
               </div>
+
+              {/* Widgets */}
+              {visibleWidgets.length === 0 ? (
+                <EmptyDashboard onAddWidget={() => { setEditMode(true); setShowCatalog(true); }} />
+              ) : (
+                <div className={cn("space-y-6", editMode && "pt-3")}>
+                  {visibleWidgets.map((id, idx) => renderWidget(id, idx))}
+                </div>
+              )}
+
+              {/* Add widget hint when in normal mode with hidden widgets */}
+              {!editMode && hiddenWidgets.size > 0 && (
+                <div className="flex items-center justify-center">
+                  <button
+                    onClick={() => { setEditMode(true); setShowCatalog(true); }}
+                    className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500 hover:text-amber-500 dark:hover:text-amber-400 transition-colors py-2"
+                  >
+                    <Plus size={12} />
+                    {hiddenWidgets.size} hidden widget{hiddenWidgets.size !== 1 ? "s" : ""} · Click to restore
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -1147,9 +1484,7 @@ export default function DashboardPage() {
                     className="bg-transparent text-xs text-slate-700 dark:text-slate-300 placeholder-slate-400 outline-none w-36"
                   />
                   {searchQ && (
-                    <button onClick={() => setSearchQ("")} className="text-slate-400 hover:text-slate-600">
-                      <X size={11} />
-                    </button>
+                    <button onClick={() => setSearchQ("")} className="text-slate-400 hover:text-slate-600"><X size={11} /></button>
                   )}
                 </div>
               </div>
@@ -1157,7 +1492,7 @@ export default function DashboardPage() {
               {searchQ ? (
                 <div className="space-y-2">
                   {filteredZones.length === 0 && (
-                    <p className="text-sm text-slate-400 text-center py-8">No zones match "{searchQ}"</p>
+                    <p className="text-sm text-slate-400 text-center py-8">No zones match &ldquo;{searchQ}&rdquo;</p>
                   )}
                   {filteredZones.map(z => (
                     <div key={z.id}>
@@ -1181,27 +1516,19 @@ export default function DashboardPage() {
                         <Building2 size={18} className="text-amber-500 shrink-0" />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-bold text-slate-900 dark:text-white">{b.name}</p>
-                          <p className="text-xs text-slate-400 dark:text-slate-500">
-                            {b.location} · {b.floors.length} floor{b.floors.length > 1 ? "s" : ""}
-                          </p>
+                          <p className="text-xs text-slate-400 dark:text-slate-500">{b.location} · {b.floors.length} floor{b.floors.length > 1 ? "s" : ""}</p>
                         </div>
                         <div className="text-right shrink-0">
                           <p className="text-xs font-bold text-slate-800 dark:text-white">{on}/{bZones.length} zones on</p>
                           <p className="text-[11px] text-slate-400">{(bWatts / 1000).toFixed(1)} kW live</p>
                         </div>
-                        {isExp
-                          ? <ChevronUp size={16} className="text-slate-400 shrink-0" />
-                          : <ChevronDown size={16} className="text-slate-400 shrink-0" />
-                        }
+                        {isExp ? <ChevronUp size={16} className="text-slate-400 shrink-0" /> : <ChevronDown size={16} className="text-slate-400 shrink-0" />}
                       </button>
-
                       {isExp && (
                         <div className="border-t border-slate-100 dark:border-slate-800 px-5 pb-4 space-y-4 pt-3">
                           {b.floors.map(f => (
                             <div key={f.id}>
-                              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                                {f.name}
-                              </p>
+                              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">{f.name}</p>
                               <div className="space-y-2">
                                 {f.zones.map(z => (
                                   <ZoneRow key={z.id} zone={z} onToggle={toggleZone} onBrightness={setBrightness} />
@@ -1226,15 +1553,11 @@ export default function DashboardPage() {
                   {alertList.length} active alert{alertList.length !== 1 ? "s" : ""}
                 </h2>
                 {alertList.length > 0 && (
-                  <button
-                    onClick={() => setAlertList([])}
-                    className="text-xs text-slate-500 hover:text-red-500 font-medium transition-colors"
-                  >
+                  <button onClick={() => setAlertList([])} className="text-xs text-slate-500 hover:text-red-500 font-medium transition-colors">
                     Dismiss all
                   </button>
                 )}
               </div>
-
               {alertList.length === 0 && (
                 <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-12 text-center shadow-sm">
                   <CheckCircle2 size={32} className="text-green-500 mx-auto mb-3" />
@@ -1242,7 +1565,6 @@ export default function DashboardPage() {
                   <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">No active alerts across your portfolio.</p>
                 </div>
               )}
-
               {(["critical", "warning", "info"] as Alert["severity"][]).map(sev => {
                 const group = alertList.filter(a => a.severity === sev);
                 if (group.length === 0) return null;
@@ -1264,11 +1586,7 @@ export default function DashboardPage() {
                             <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{a.message}</p>
                             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{a.zone} · {a.ts}</p>
                           </div>
-                          <button
-                            onClick={() => dismissAlert(a.id)}
-                            className="text-slate-400 hover:text-red-500 transition-colors shrink-0"
-                            aria-label="Dismiss"
-                          >
+                          <button onClick={() => dismissAlert(a.id)} className="text-slate-400 hover:text-red-500 transition-colors shrink-0" aria-label="Dismiss">
                             <X size={14} />
                           </button>
                         </div>
@@ -1317,7 +1635,6 @@ export default function DashboardPage() {
           {tab === "reports" && (
             <div className="space-y-4">
               <h2 className="text-sm font-bold text-slate-900 dark:text-white">Generated reports</h2>
-
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
                   { label: "Avg daily kWh", value: "82.4", icon: <Activity size={14} className="text-amber-500" /> },
@@ -1334,7 +1651,6 @@ export default function DashboardPage() {
                   </div>
                 ))}
               </div>
-
               <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
@@ -1348,20 +1664,14 @@ export default function DashboardPage() {
                   </thead>
                   <tbody>
                     {reports.map((r, i) => (
-                      <tr key={r.id} className={cn(
-                        "border-b border-slate-50 dark:border-slate-800/80 last:border-0",
-                        i % 2 !== 0 && "bg-slate-50/50 dark:bg-slate-800/20"
-                      )}>
+                      <tr key={r.id} className={cn("border-b border-slate-50 dark:border-slate-800/80 last:border-0", i % 2 !== 0 && "bg-slate-50/50 dark:bg-slate-800/20")}>
                         <td className="px-5 py-3 text-sm font-medium text-slate-800 dark:text-slate-200 whitespace-nowrap">{r.name}</td>
                         <td className="px-3 py-3 text-xs text-slate-500 dark:text-slate-400 hidden sm:table-cell">{r.scope}</td>
                         <td className="px-3 py-3 text-xs text-slate-400 hidden md:table-cell">{r.generated}</td>
                         <td className="px-3 py-3 text-xs text-slate-400 hidden md:table-cell">{r.size}</td>
                         <td className="px-5 py-3 text-right">
                           <button
-                            onClick={() => {
-                              setReportToast(`Downloading "${r.name}"…`);
-                              setTimeout(() => setReportToast(null), 2500);
-                            }}
+                            onClick={() => { setReportToast(`Downloading "${r.name}"…`); setTimeout(() => setReportToast(null), 2500); }}
                             className="text-xs font-semibold text-amber-500 hover:text-amber-400 transition-colors"
                           >
                             Download
@@ -1383,6 +1693,15 @@ export default function DashboardPage() {
 
         </main>
       </div>
+
+      {/* Widget catalog modal */}
+      {showCatalog && (
+        <WidgetCatalogModal
+          hiddenWidgets={hiddenWidgets}
+          onAdd={addWidget}
+          onClose={() => setShowCatalog(false)}
+        />
+      )}
 
       {/* Toast */}
       {reportToast && (
