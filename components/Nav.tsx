@@ -183,21 +183,20 @@ export default function Nav({ onDemo }: { onDemo: () => void }) {
             )}
           </nav>
 
-          {/* Right — logged-in state */}
+          {/* Right — auth actions */}
           <div className="hidden md:flex items-center gap-3">
             <ThemeToggle />
-            {/* User chip */}
-            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
-                JD
-              </div>
-              <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Jordan Davis</span>
-            </div>
             <Link
-              href="/dashboard"
+              href="/login"
+              className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+            >
+              Sign in
+            </Link>
+            <Link
+              href="/login"
               className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-white rounded-lg shadow-sm hover:shadow-amber-400/30 transition-all"
             >
-              Go to Dashboard
+              Get started
             </Link>
           </div>
 
@@ -259,11 +258,11 @@ export default function Nav({ onDemo }: { onDemo: () => void }) {
           </div>
 
           <Link
-            href="/dashboard"
+            href="/login"
             onClick={() => setOpen(false)}
             className="mt-3 flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-white rounded-lg transition-all"
           >
-            Go to Dashboard
+            Sign in
           </Link>
         </div>
       )}
