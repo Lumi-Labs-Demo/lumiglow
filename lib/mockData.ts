@@ -154,7 +154,7 @@ export const testimonials: Testimonial[] = [
   },
   {
     id: "t2",
-    quote: "The RBAC model mapped perfectly to our existing org structure. Our security team was satisfied after a single review — SSO via Azure AD was live in an afternoon.",
+    quote: "The RBAC model mapped perfectly to our existing workspace structure. Our security team was satisfied after a single review — SSO via Azure AD was live in an afternoon.",
     name: "James Whitfield",
     title: "Director of IT Operations",
     company: "Crestline Healthcare",
@@ -199,7 +199,7 @@ export const pricingTiers: PricingTier[] = [
     name: "Team",
     price: "$299",
     period: "per month",
-    description: "For growing teams managing a single site.",
+    description: "For growing workspaces managing a single site.",
     cta: "Start free trial",
     highlighted: false,
     features: [
@@ -220,7 +220,7 @@ export const pricingTiers: PricingTier[] = [
     name: "Business",
     price: "$999",
     period: "per month",
-    description: "For multi-site organizations that need real controls.",
+    description: "For multi-site workspaces that need real controls.",
     cta: "Start free trial",
     highlighted: false,
     features: [

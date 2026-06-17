@@ -10,6 +10,7 @@ import {
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
   Palette, Upload, Eye, Plug, RefreshCw, ArrowLeftRight,
   Database, Globe, Link2, AlertCircle, Clock,
+  UserPlus, ShieldOff, PlayCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -24,7 +25,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings" | "integrations";
+type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings" | "integrations" | "onboarding";
 
 interface BrandingConfig {
   companyName: string;
@@ -181,7 +182,7 @@ function ZoneRow({ zone, onToggle, onBrightness }: {
       {/* Toggle */}
       <button
         onClick={() => onToggle(zone.id)}
-        className={cn("shrink-0 transition-colors", zone.isOn ? "text-amber-500" : "text-slate-400 dark:text-slate-600")}
+        className={cn("shrink-0 transition-colors", zone.isOn ? "text-amber-500" : "text-slate-400 dark:text-slate-500")}
         aria-label={zone.isOn ? "Turn off" : "Turn on"}
       >
         {zone.isOn ? <ToggleRight size={26} /> : <ToggleLeft size={26} />}
@@ -190,7 +191,7 @@ function ZoneRow({ zone, onToggle, onBrightness }: {
       {/* Name & meta */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className={cn("text-sm font-semibold truncate", zone.isOn ? "text-slate-900 dark:text-white" : "text-slate-400 dark:text-slate-500")}>
+          <span className={cn("text-sm font-semibold truncate", zone.isOn ? "text-slate-900 dark:text-white" : "text-slate-400 dark:text-slate-400")}>
             {zone.name}
           </span>
           <span className={cn(
@@ -202,14 +203,14 @@ function ZoneRow({ zone, onToggle, onBrightness }: {
             {zone.schedule}
           </span>
         </div>
-        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">
+        <p className="text-[11px] text-slate-400 dark:text-slate-400 mt-0.5 truncate">
           {zone.lastChangedBy} · {zone.lastChangedAt}
         </p>
       </div>
 
       {/* Brightness */}
       <div className="hidden sm:flex items-center gap-2 w-32 shrink-0">
-        <Sun size={12} className={cn("shrink-0", zone.isOn ? "text-amber-400" : "text-slate-300 dark:text-slate-600")} />
+        <Sun size={12} className={cn("shrink-0", zone.isOn ? "text-amber-400" : "text-slate-300 dark:text-slate-500")} />
         <input
           type="range"
           min={0}
@@ -219,14 +220,14 @@ function ZoneRow({ zone, onToggle, onBrightness }: {
           onChange={e => onBrightness(zone.id, Number(e.target.value))}
           className={cn("flex-1 h-1.5 rounded-full appearance-none cursor-pointer accent-amber-400", !zone.isOn && "opacity-30 cursor-not-allowed")}
         />
-        <span className={cn("text-[11px] w-7 text-right font-mono", zone.isOn ? "text-slate-600 dark:text-slate-400" : "text-slate-300 dark:text-slate-600")}>
+        <span className={cn("text-[11px] w-7 text-right font-mono", zone.isOn ? "text-slate-600 dark:text-slate-400" : "text-slate-300 dark:text-slate-500")}>
           {zone.brightness}%
         </span>
       </div>
 
       {/* Watts */}
       <div className="shrink-0 text-right">
-        <span className={cn("text-sm font-bold tabular-nums", zone.isOn ? "text-slate-800 dark:text-slate-200" : "text-slate-300 dark:text-slate-600")}>
+        <span className={cn("text-sm font-bold tabular-nums", zone.isOn ? "text-slate-800 dark:text-slate-200" : "text-slate-300 dark:text-slate-500")}>
           {zone.powerWatts}W
         </span>
       </div>
@@ -255,7 +256,7 @@ function KpiCard({ label, value, sub, icon, accent }: {
       <div>
         <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{label}</p>
         <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-0.5">{value}</p>
-        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{sub}</p>
+        <p className="text-[11px] text-slate-400 dark:text-slate-400 mt-0.5">{sub}</p>
       </div>
     </div>
   );
@@ -361,9 +362,9 @@ function SettingsPanel({
           <div key={row.label} className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800 last:border-0">
             <div>
               <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{row.label}</p>
-              <p className="text-xs text-slate-400 dark:text-slate-500">{row.sub}</p>
+              <p className="text-xs text-slate-400 dark:text-slate-400">{row.sub}</p>
             </div>
-            <button onClick={() => row.set(!row.val)} className={cn("transition-colors", row.val ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>
+            <button onClick={() => row.set(!row.val)} className={cn("transition-colors", row.val ? "text-amber-500" : "text-slate-300 dark:text-slate-500")}>
               {row.val ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
             </button>
           </div>
@@ -376,9 +377,9 @@ function SettingsPanel({
         <div className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800">
           <div>
             <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">Auto-apply schedule policies</p>
-            <p className="text-xs text-slate-400 dark:text-slate-500">System adjusts brightness automatically</p>
+            <p className="text-xs text-slate-400 dark:text-slate-400">System adjusts brightness automatically</p>
           </div>
-          <button onClick={() => setAutoPolicy(!autoPolicy)} className={cn("transition-colors", autoPolicy ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>
+          <button onClick={() => setAutoPolicy(!autoPolicy)} className={cn("transition-colors", autoPolicy ? "text-amber-500" : "text-slate-300 dark:text-slate-500")}>
             {autoPolicy ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
           </button>
         </div>
@@ -390,9 +391,9 @@ function SettingsPanel({
         <div className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800">
           <div>
             <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">Two-factor authentication</p>
-            <p className="text-xs text-slate-400 dark:text-slate-500">TOTP via authenticator app</p>
+            <p className="text-xs text-slate-400 dark:text-slate-400">TOTP via authenticator app</p>
           </div>
-          <button onClick={() => setTwoFA(!twoFA)} className={cn("transition-colors", twoFA ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>
+          <button onClick={() => setTwoFA(!twoFA)} className={cn("transition-colors", twoFA ? "text-amber-500" : "text-slate-300 dark:text-slate-500")}>
             {twoFA ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
           </button>
         </div>
@@ -582,6 +583,259 @@ function SettingsPanel({
   );
 }
 
+// ─── Onboarding Panel ────────────────────────────────────────────────────────
+
+type OnboardingState = "resume" | "empty-invite" | "denied";
+
+function OnboardingPanel() {
+  const [activeState, setActiveState] = useState<OnboardingState>("resume");
+  const [resuming, setResuming] = useState(false);
+  const [resumed, setResumed] = useState(false);
+  const [inviteSent, setInviteSent] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [accessRequested, setAccessRequested] = useState(false);
+
+  function handleResume() {
+    setResuming(true);
+    setTimeout(() => { setResuming(false); setResumed(true); }, 1800);
+  }
+
+  function handleInvite() {
+    if (!inviteEmail) return;
+    setInviteSent(true);
+  }
+
+  function handleRequestAccess() {
+    setAccessRequested(true);
+  }
+
+  const stateButtons: { id: OnboardingState; label: string; icon: React.ReactNode }[] = [
+    { id: "resume",       label: "Refresh / Resume",    icon: <RefreshCw size={13} /> },
+    { id: "empty-invite", label: "Empty State (Invite)", icon: <UserPlus size={13} /> },
+    { id: "denied",       label: "Permission Denied",    icon: <ShieldOff size={13} /> },
+  ];
+
+  return (
+    <div className="max-w-2xl space-y-6">
+      {/* Header */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center shrink-0">
+            <PlayCircle size={18} className="text-amber-500" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Workspace Onboarding</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Step 2 of 4 — Invite your workspace members</p>
+          </div>
+        </div>
+        <div className="flex gap-1.5 mt-4">
+          {["Create workspace", "Invite members", "Connect buildings", "Go live"].map((step, i) => (
+            <div key={step} className="flex-1">
+              <div className={cn(
+                "h-1.5 rounded-full",
+                i === 0 ? "bg-amber-500" :
+                i === 1 ? "bg-amber-300 dark:bg-amber-400/60" :
+                "bg-slate-200 dark:bg-slate-700"
+              )} />
+              <p className={cn(
+                "text-[10px] mt-1 truncate",
+                i === 0 ? "text-amber-600 dark:text-amber-400 font-semibold" :
+                i === 1 ? "text-slate-600 dark:text-slate-300 font-medium" :
+                "text-slate-400 dark:text-slate-500"
+              )}>{step}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Edge-case state selector */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
+        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">Edge case frames</p>
+        <div className="flex flex-wrap gap-2">
+          {stateButtons.map(btn => (
+            <button
+              key={btn.id}
+              onClick={() => { setActiveState(btn.id); setResumed(false); setInviteSent(false); setAccessRequested(false); }}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all",
+                activeState === btn.id
+                  ? "bg-amber-50 dark:bg-amber-500/15 border-amber-300 dark:border-amber-500/40 text-amber-700 dark:text-amber-400"
+                  : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+              )}
+            >
+              {btn.icon}
+              {btn.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── State: Refresh / Resume ── */}
+      {activeState === "resume" && (
+        <div className="rounded-2xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/5 p-6 shadow-sm">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center shrink-0 mt-0.5">
+              <RefreshCw size={18} className={cn("text-amber-500", resuming && "animate-spin")} />
+            </div>
+            <div className="flex-1">
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-1">Setup interrupted</h4>
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed mb-4">
+                It looks like your workspace setup was interrupted at <strong>Step 2 — Invite members</strong>.
+                Your progress has been saved. Resume now to continue where you left off.
+              </p>
+              {resumed ? (
+                <div className="flex items-center gap-2 text-xs font-semibold text-green-600 dark:text-green-400">
+                  <CheckCircle2 size={15} />
+                  Workspace setup resumed — you&apos;re back on track!
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleResume}
+                    disabled={resuming}
+                    className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-amber-500 hover:bg-amber-400 rounded-lg transition-colors disabled:opacity-70"
+                  >
+                    <PlayCircle size={13} />
+                    {resuming ? "Resuming…" : "Resume setup"}
+                  </button>
+                  <button className="px-4 py-2 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors">
+                    Start over
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── State: Empty state after invite ── */}
+      {activeState === "empty-invite" && (
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+          <div className="flex items-center gap-3 mb-5">
+            <UserPlus size={16} className="text-amber-500" />
+            <h4 className="text-sm font-bold text-slate-900 dark:text-white">Invite workspace members</h4>
+          </div>
+          {inviteSent ? (
+            <div className="text-center py-8">
+              <div className="w-14 h-14 rounded-full bg-green-50 dark:bg-green-500/10 flex items-center justify-center mx-auto mb-3">
+                <CheckCircle2 size={24} className="text-green-500" />
+              </div>
+              <h5 className="text-sm font-bold text-slate-900 dark:text-white mb-1">Invitation sent!</h5>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
+                We emailed <strong className="text-slate-700 dark:text-slate-200">{inviteEmail}</strong> a link to join your workspace.
+              </p>
+              <p className="text-xs text-slate-400 dark:text-slate-400 mb-5">
+                This seat will remain reserved until they accept or the invite expires in 7 days.
+              </p>
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-amber-50 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30">
+                <Clock size={11} />
+                Waiting for acceptance
+              </div>
+              <div className="mt-4">
+                <button
+                  onClick={() => { setInviteSent(false); setInviteEmail(""); }}
+                  className="text-xs text-amber-500 hover:text-amber-400 font-semibold"
+                >
+                  Invite another member →
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="text-center py-6 mb-5 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
+                <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-3">
+                  <Users size={20} className="text-slate-400" />
+                </div>
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Your workspace is empty</p>
+                <p className="text-xs text-slate-400 dark:text-slate-400 mt-1">Add members to collaborate on building management.</p>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={e => setInviteEmail(e.target.value)}
+                  placeholder="colleague@acme.com"
+                  className="flex-1 px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+                <button
+                  onClick={handleInvite}
+                  disabled={!inviteEmail}
+                  className="px-4 py-2 text-xs font-semibold text-white bg-amber-500 hover:bg-amber-400 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  Send invite
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400 dark:text-slate-400 mt-2">
+                Invitees will receive a secure email link to create their account.
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── State: Permission denied (non-admin) ── */}
+      {activeState === "denied" && (
+        <div className="rounded-2xl border border-red-100 dark:border-red-500/20 bg-red-50 dark:bg-red-500/5 p-6 shadow-sm">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
+              <ShieldOff size={18} className="text-red-500" />
+            </div>
+            <div className="flex-1">
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-1">Admin access required</h4>
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed mb-1">
+                Inviting members to your workspace requires <strong>Workspace Admin</strong> permissions.
+                Your current role is <span className="font-semibold text-slate-800 dark:text-slate-200">Operator</span>.
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                Contact your workspace admin to upgrade your role, or ask them to send the invitation directly.
+              </p>
+              {accessRequested ? (
+                <div className="flex items-center gap-2 text-xs font-semibold text-sky-600 dark:text-sky-400">
+                  <CheckCircle2 size={13} />
+                  Request sent to workspace admin · jordan@acme.com
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={handleRequestAccess}
+                    className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-red-500 hover:bg-red-400 rounded-lg transition-colors"
+                  >
+                    <Users size={13} />
+                    Request admin access
+                  </button>
+                  <a href="#" className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 underline underline-offset-2 transition-colors">
+                    Learn about workspace roles →
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Glossary */}
+      <div className="rounded-2xl border border-sky-100 dark:border-sky-500/20 bg-sky-50 dark:bg-sky-500/5 p-5 shadow-sm">
+        <p className="text-xs font-bold text-sky-700 dark:text-sky-400 mb-3 flex items-center gap-1.5">
+          <Info size={13} /> Workspace terminology glossary
+        </p>
+        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+          {[
+            ["Workspace", "Your organization's LumiGlow account — contains all buildings, members, and settings."],
+            ["Workspace Admin", "Can invite members, change roles, and manage billing."],
+            ["Operator", "Can control zones and schedules, but cannot manage members."],
+            ["Viewer", "Read-only access to dashboards and reports."],
+          ].map(([term, def]) => (
+            <div key={term} className="flex flex-col gap-0.5">
+              <dt className="text-xs font-semibold text-sky-700 dark:text-sky-300">{term}</dt>
+              <dd className="text-[11px] text-sky-600/80 dark:text-sky-400/80 leading-relaxed">{def}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </div>
+  );
+}
+
 // ─── HubSpot Integration Panel ───────────────────────────────────────────────
 
 const FIELD_MAPPINGS = [
@@ -633,7 +887,7 @@ function IntegrationsPanel() {
           </div>
           <div className="flex-1">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">HubSpot CRM</h3>
-            <p className="text-xs text-slate-400 dark:text-slate-500">Sync contacts &amp; support tickets</p>
+            <p className="text-xs text-slate-400 dark:text-slate-400">Sync contacts &amp; support tickets</p>
           </div>
           {connected ? (
             <span className="flex items-center gap-1.5 text-[11px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2.5 py-1 rounded-full">
@@ -709,11 +963,11 @@ function IntegrationsPanel() {
           <div key={row.label} className="flex items-center justify-between py-3.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
             <div>
               <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{row.label}</p>
-              <p className="text-xs text-slate-400 dark:text-slate-500">{row.sub}</p>
+              <p className="text-xs text-slate-400 dark:text-slate-400">{row.sub}</p>
             </div>
             <button
               onClick={() => row.set(!row.val)}
-              className={cn("transition-colors shrink-0 ml-4", row.val ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}
+              className={cn("transition-colors shrink-0 ml-4", row.val ? "text-amber-500" : "text-slate-300 dark:text-slate-500")}
             >
               {row.val ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
             </button>
@@ -746,17 +1000,17 @@ function IntegrationsPanel() {
           <table className="w-full text-xs min-w-[400px]">
             <thead>
               <tr className="border-b border-slate-100 dark:border-slate-800">
-                <th className="text-left font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Source field</th>
-                <th className="text-center font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1 w-8">→</th>
-                <th className="text-left font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Target field</th>
-                <th className="text-right font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Status</th>
+                <th className="text-left font-semibold text-slate-400 dark:text-slate-400 pb-2 px-1">Source field</th>
+                <th className="text-center font-semibold text-slate-400 dark:text-slate-400 pb-2 px-1 w-8">→</th>
+                <th className="text-left font-semibold text-slate-400 dark:text-slate-400 pb-2 px-1">Target field</th>
+                <th className="text-right font-semibold text-slate-400 dark:text-slate-400 pb-2 px-1">Status</th>
               </tr>
             </thead>
             <tbody>
               {FIELD_MAPPINGS.map((m, i) => (
                 <tr key={i} className="border-b border-slate-50 dark:border-slate-800/60 last:border-0">
                   <td className="py-2.5 px-1 text-slate-700 dark:text-slate-300 font-medium">{m.source}</td>
-                  <td className="py-2.5 px-1 text-center text-slate-300 dark:text-slate-600">→</td>
+                  <td className="py-2.5 px-1 text-center text-slate-300 dark:text-slate-500">→</td>
                   <td className="py-2.5 px-1 text-slate-500 dark:text-slate-400">{m.target}</td>
                   <td className="py-2.5 px-1 text-right">
                     {m.status === "synced" ? (
@@ -882,6 +1136,7 @@ export default function DashboardPage() {
     { id: "alerts",       label: "Alerts",       icon: <Bell size={17} />, badge: alertList.filter(a => a.severity !== "info").length },
     { id: "schedules",    label: "Schedules",    icon: <Calendar size={17} /> },
     { id: "reports",      label: "Reports",      icon: <BarChart3 size={17} /> },
+    { id: "onboarding",   label: "Onboarding",   icon: <PlayCircle size={17} /> },
     { id: "integrations", label: "Integrations", icon: <Plug size={17} /> },
     { id: "settings",     label: "Settings",     icon: <Settings size={17} /> },
   ];
@@ -956,7 +1211,7 @@ export default function DashboardPage() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">Jordan Davis</p>
-              <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">Facility Manager</p>
+              <p className="text-[10px] text-slate-400 dark:text-slate-400 truncate">Facility Manager</p>
             </div>
             <Link href="/" aria-label="Sign out" className="text-slate-400 hover:text-red-500 transition-colors">
               <LogOut size={14} />
@@ -987,7 +1242,7 @@ export default function DashboardPage() {
 
           <div>
             <h1 className="text-sm font-bold text-slate-900 dark:text-white capitalize">{tab}</h1>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:block">
+            <p className="text-[11px] text-slate-400 dark:text-slate-400 hidden sm:block">
               {branding.tagline}
             </p>
           </div>
@@ -1063,7 +1318,7 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h2 className="text-sm font-bold text-slate-900 dark:text-white">Energy usage today</h2>
-                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">All buildings · kWh per hour</p>
+                    <p className="text-xs text-slate-400 dark:text-slate-400 mt-0.5">All buildings · kWh per hour</p>
                   </div>
                   <span className="text-xs font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2.5 py-1 rounded-full">
                     ↓ {savings}% vs baseline
@@ -1088,7 +1343,7 @@ export default function DashboardPage() {
                         <AlertBadge severity={a.severity} />
                         <div className="flex-1 min-w-0">
                           <p className="text-xs text-slate-700 dark:text-slate-300 font-medium truncate">{a.message}</p>
-                          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{a.zone} · {a.ts}</p>
+                          <p className="text-[11px] text-slate-400 dark:text-slate-400 mt-0.5">{a.zone} · {a.ts}</p>
                         </div>
                       </div>
                     ))}
@@ -1116,7 +1371,7 @@ export default function DashboardPage() {
                           <Building2 size={15} className="text-slate-400 shrink-0" />
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{b.name}</p>
-                            <p className="text-[11px] text-slate-400 dark:text-slate-500">{b.location}</p>
+                            <p className="text-[11px] text-slate-400 dark:text-slate-400">{b.location}</p>
                           </div>
                           <div className="text-right shrink-0">
                             <p className="text-xs font-bold text-slate-800 dark:text-white">{on}/{bZones.length} on</p>
@@ -1161,7 +1416,7 @@ export default function DashboardPage() {
                   )}
                   {filteredZones.map(z => (
                     <div key={z.id}>
-                      <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-1 px-1">{z.buildingName} · {z.floorName}</p>
+                      <p className="text-[11px] text-slate-400 dark:text-slate-400 mb-1 px-1">{z.buildingName} · {z.floorName}</p>
                       <ZoneRow zone={z} onToggle={toggleZone} onBrightness={setBrightness} />
                     </div>
                   ))}
@@ -1181,7 +1436,7 @@ export default function DashboardPage() {
                         <Building2 size={18} className="text-amber-500 shrink-0" />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-bold text-slate-900 dark:text-white">{b.name}</p>
-                          <p className="text-xs text-slate-400 dark:text-slate-500">
+                          <p className="text-xs text-slate-400 dark:text-slate-400">
                             {b.location} · {b.floors.length} floor{b.floors.length > 1 ? "s" : ""}
                           </p>
                         </div>
@@ -1239,7 +1494,7 @@ export default function DashboardPage() {
                 <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-12 text-center shadow-sm">
                   <CheckCircle2 size={32} className="text-green-500 mx-auto mb-3" />
                   <p className="text-sm font-semibold text-slate-900 dark:text-white">All clear!</p>
-                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">No active alerts across your portfolio.</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-400 mt-1">No active alerts across your portfolio.</p>
                 </div>
               )}
 
@@ -1290,7 +1545,7 @@ export default function DashboardPage() {
                     "flex items-center gap-4 p-4 rounded-2xl border shadow-sm bg-white dark:bg-slate-900 transition-all",
                     scheduleActive[s.id] ? "border-slate-200 dark:border-slate-700/60" : "opacity-60 border-slate-100 dark:border-slate-800"
                   )}>
-                    <Calendar size={16} className={scheduleActive[s.id] ? "text-amber-500 shrink-0" : "text-slate-300 dark:text-slate-600 shrink-0"} />
+                    <Calendar size={16} className={scheduleActive[s.id] ? "text-amber-500 shrink-0" : "text-slate-300 dark:text-slate-500 shrink-0"} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{s.name}</p>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{s.scope} · {s.time}</p>
@@ -1303,7 +1558,7 @@ export default function DashboardPage() {
                     )}>{s.mode}</span>
                     <button
                       onClick={() => setScheduleActive(prev => ({ ...prev, [s.id]: !prev[s.id] }))}
-                      className={cn("shrink-0 transition-colors", scheduleActive[s.id] ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}
+                      className={cn("shrink-0 transition-colors", scheduleActive[s.id] ? "text-amber-500" : "text-slate-300 dark:text-slate-500")}
                     >
                       {scheduleActive[s.id] ? <ToggleRight size={26} /> : <ToggleLeft size={26} />}
                     </button>
@@ -1328,7 +1583,7 @@ export default function DashboardPage() {
                   <div key={s.label} className="rounded-xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-3 shadow-sm flex items-center gap-2.5">
                     <div className="shrink-0">{s.icon}</div>
                     <div>
-                      <p className="text-[10px] text-slate-400 dark:text-slate-500">{s.label}</p>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-400">{s.label}</p>
                       <p className="text-sm font-bold text-slate-900 dark:text-white">{s.value}</p>
                     </div>
                   </div>
@@ -1339,10 +1594,10 @@ export default function DashboardPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 dark:border-slate-800">
-                      <th className="text-left text-xs font-semibold text-slate-400 dark:text-slate-500 px-5 py-3">Report</th>
-                      <th className="text-left text-xs font-semibold text-slate-400 dark:text-slate-500 px-3 py-3 hidden sm:table-cell">Scope</th>
-                      <th className="text-left text-xs font-semibold text-slate-400 dark:text-slate-500 px-3 py-3 hidden md:table-cell">Generated</th>
-                      <th className="text-left text-xs font-semibold text-slate-400 dark:text-slate-500 px-3 py-3 hidden md:table-cell">Size</th>
+                      <th className="text-left text-xs font-semibold text-slate-400 dark:text-slate-400 px-5 py-3">Report</th>
+                      <th className="text-left text-xs font-semibold text-slate-400 dark:text-slate-400 px-3 py-3 hidden sm:table-cell">Scope</th>
+                      <th className="text-left text-xs font-semibold text-slate-400 dark:text-slate-400 px-3 py-3 hidden md:table-cell">Generated</th>
+                      <th className="text-left text-xs font-semibold text-slate-400 dark:text-slate-400 px-3 py-3 hidden md:table-cell">Size</th>
                       <th className="px-5 py-3" />
                     </tr>
                   </thead>
@@ -1374,6 +1629,9 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
+
+          {/* ── ONBOARDING ── */}
+          {tab === "onboarding" && <OnboardingPanel />}
 
           {/* ── INTEGRATIONS ── */}
           {tab === "integrations" && <IntegrationsPanel />}
