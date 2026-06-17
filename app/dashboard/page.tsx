@@ -582,6 +582,232 @@ function SettingsPanel({
   );
 }
 
+// ─── Intercom Integration Panel ──────────────────────────────────────────────
+
+const INTERCOM_FIELD_MAPPINGS = [
+  { source: "Intercom Conversation ID", target: "Support Ticket ID",        status: "synced"  },
+  { source: "Contact Email",            target: "Requester Email",           status: "synced"  },
+  { source: "Contact Name",             target: "Requester Name",            status: "synced"  },
+  { source: "Conversation Body",        target: "Ticket Description",        status: "synced"  },
+  { source: "Assignee",                 target: "Agent Assignment",          status: "pending" },
+  { source: "Tags",                     target: "Ticket Labels",             status: "pending" },
+  { source: "Conversation Status",      target: "Ticket Status",             status: "synced"  },
+];
+
+const INTERCOM_SYNC_LOG = [
+  { ts: "Today 13:15",  event: "Conversation sync completed",     count: "67 records",  ok: true  },
+  { ts: "Today 09:00",  event: "Contact import from Intercom",    count: "203 contacts",ok: true  },
+  { ts: "Yesterday",    event: "OAuth token refreshed",           count: "",            ok: true  },
+  { ts: "May 18",       event: "Conversation sync – rate limited",count: "1 warning",   ok: false },
+];
+
+function IntercomIntegrationCard() {
+  const [connected, setConnected]   = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [syncConv, setSyncConv]     = useState(true);
+  const [syncContacts, setSyncContacts] = useState(true);
+  const [syncFreq, setSyncFreq]     = useState("15");
+  const [syncing, setSyncing]       = useState(false);
+  const [syncToast, setSyncToast]   = useState(false);
+
+  function handleConnect() {
+    setConnecting(true);
+    setTimeout(() => { setConnecting(false); setConnected(true); }, 1800);
+  }
+
+  function handleSync() {
+    setSyncing(true);
+    setTimeout(() => { setSyncing(false); setSyncToast(true); setTimeout(() => setSyncToast(false), 2500); }, 2000);
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* ── Connection Card ── */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg, #1F6EEB, #00B2FF)" }}>
+            <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 4a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm-3.5 3.5h7a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5V10a.5.5 0 0 1 .5-.5zm.5 1v4h6v-4H9zm-1 6.5h8a.5.5 0 0 1 0 1H8a.5.5 0 0 1 0-1z"/>
+            </svg>
+          </div>
+          <div className="flex-1">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Intercom</h3>
+            <p className="text-xs text-slate-400 dark:text-slate-500">Sync conversations &amp; customer contacts</p>
+          </div>
+          {connected ? (
+            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2.5 py-1 rounded-full">
+              <CheckCircle2 size={11} /> Connected
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full">
+              <AlertCircle size={11} /> Not connected
+            </span>
+          )}
+        </div>
+
+        {!connected ? (
+          <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 p-4 mb-4">
+            <p className="text-xs text-slate-600 dark:text-slate-300 mb-3">
+              Connect your Intercom workspace to sync customer conversations and contacts.
+              You&apos;ll be redirected to Intercom to authorise access via OAuth 2.0.
+            </p>
+            <ul className="space-y-1.5 mb-4">
+              {["Read & write conversations", "Sync customer contact profiles", "Push support ticket updates to Intercom"].map(s => (
+                <li key={s} className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                  <CheckCircle2 size={12} className="text-green-500 shrink-0" />
+                  {s}
+                </li>
+              ))}
+            </ul>
+            <button
+              onClick={handleConnect}
+              disabled={connecting}
+              className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition-all disabled:opacity-70"
+              style={{ background: connecting ? "#94a3b8" : "linear-gradient(135deg, #1F6EEB, #00B2FF)" }}
+            >
+              {connecting ? <><RefreshCw size={14} className="animate-spin" /> Connecting…</> : <><Link2 size={14} /> Connect Intercom</>}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="rounded-xl border border-green-100 dark:border-green-500/20 bg-green-50 dark:bg-green-500/5 p-4 flex items-center gap-3">
+              <Globe size={15} className="text-green-500 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">acme-corp.intercom.io</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">OAuth token active · Expires in 89 days</p>
+              </div>
+              <button
+                onClick={() => setConnected(false)}
+                className="text-[11px] text-red-500 hover:text-red-400 font-medium shrink-0"
+              >
+                Disconnect
+              </button>
+            </div>
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-60"
+            >
+              <RefreshCw size={13} className={syncing ? "animate-spin" : ""} />
+              {syncing ? "Syncing…" : "Sync now"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ── Sync Settings ── */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-5">
+          <ArrowLeftRight size={15} className="text-amber-500" />
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Sync settings</h3>
+        </div>
+        {[
+          { label: "Conversation sync",  sub: "Pull Intercom conversations as support tickets",     val: syncConv,      set: setSyncConv      },
+          { label: "Contact sync",       sub: "Sync Intercom contacts with support requester list", val: syncContacts,  set: setSyncContacts  },
+        ].map(row => (
+          <div key={row.label} className="flex items-center justify-between py-3.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
+            <div>
+              <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{row.label}</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">{row.sub}</p>
+            </div>
+            <button
+              onClick={() => row.set(!row.val)}
+              className={cn("transition-colors shrink-0 ml-4", row.val ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}
+            >
+              {row.val ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+            </button>
+          </div>
+        ))}
+        <div className="pt-4">
+          <label className="text-sm text-slate-800 dark:text-slate-200 font-medium block mb-1.5">Sync frequency</label>
+          <select
+            value={syncFreq}
+            onChange={e => setSyncFreq(e.target.value)}
+            className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+          >
+            <option value="5">Every 5 minutes</option>
+            <option value="15">Every 15 minutes</option>
+            <option value="60">Every hour</option>
+            <option value="360">Every 6 hours</option>
+            <option value="1440">Daily</option>
+          </select>
+        </div>
+      </div>
+
+      {/* ── Field Mapping ── */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-5">
+          <Database size={15} className="text-amber-500" />
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Field mapping</h3>
+          <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500">Read-only</span>
+        </div>
+        <div className="overflow-x-auto -mx-1">
+          <table className="w-full text-xs min-w-[400px]">
+            <thead>
+              <tr className="border-b border-slate-100 dark:border-slate-800">
+                <th className="text-left font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Source field</th>
+                <th className="text-center font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1 w-8">→</th>
+                <th className="text-left font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Target field</th>
+                <th className="text-right font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {INTERCOM_FIELD_MAPPINGS.map((m, i) => (
+                <tr key={i} className="border-b border-slate-50 dark:border-slate-800/60 last:border-0">
+                  <td className="py-2.5 px-1 text-slate-700 dark:text-slate-300 font-medium">{m.source}</td>
+                  <td className="py-2.5 px-1 text-center text-slate-300 dark:text-slate-600">→</td>
+                  <td className="py-2.5 px-1 text-slate-500 dark:text-slate-400">{m.target}</td>
+                  <td className="py-2.5 px-1 text-right">
+                    {m.status === "synced" ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-1.5 py-0.5 rounded-full">
+                        <CheckCircle2 size={9} /> synced
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/15 px-1.5 py-0.5 rounded-full">
+                        <Clock size={9} /> pending
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ── Sync Activity Log ── */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-4">
+          <Clock size={15} className="text-amber-500" />
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Recent activity</h3>
+        </div>
+        <div className="space-y-2">
+          {INTERCOM_SYNC_LOG.map((l, i) => (
+            <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+              {l.ok
+                ? <CheckCircle2 size={13} className="text-green-500 shrink-0" />
+                : <AlertCircle size={13} className="text-red-500 shrink-0" />
+              }
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{l.event}</p>
+                {l.count && <p className="text-[11px] text-slate-400 mt-0.5">{l.count}</p>}
+              </div>
+              <p className="text-[11px] text-slate-400 shrink-0">{l.ts}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {syncToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-slate-900 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-xl">
+          <CheckCircle2 size={15} className="text-green-400 shrink-0" />
+          Sync triggered successfully!
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── HubSpot Integration Panel ───────────────────────────────────────────────
 
 const FIELD_MAPPINGS = [
@@ -602,6 +828,7 @@ const SYNC_LOG = [
 ];
 
 function IntegrationsPanel() {
+  const [activeIntegration, setActiveIntegration] = useState<"hubspot" | "intercom">("intercom");
   const [connected, setConnected]         = useState(false);
   const [connecting, setConnecting]       = useState(false);
   const [syncContacts, setSyncContacts]   = useState(true);
@@ -622,6 +849,32 @@ function IntegrationsPanel() {
 
   return (
     <div className="max-w-2xl space-y-6">
+
+      {/* ── Integration Selector ── */}
+      <div className="flex gap-2 flex-wrap">
+        {([
+          { id: "intercom" as const, label: "Intercom",  color: "#1F6EEB" },
+          { id: "hubspot"  as const, label: "HubSpot CRM", color: "#ff7a59" },
+        ]).map(opt => (
+          <button
+            key={opt.id}
+            onClick={() => setActiveIntegration(opt.id)}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border transition-all",
+              activeIntegration === opt.id
+                ? "text-white border-transparent shadow"
+                : "text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+            )}
+            style={activeIntegration === opt.id ? { backgroundColor: opt.color } : {}}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
+      {activeIntegration === "intercom" && <IntercomIntegrationCard />}
+
+      {activeIntegration === "hubspot" && <>
 
       {/* ── Connection Card ── */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
@@ -805,6 +1058,8 @@ function IntegrationsPanel() {
           Sync triggered successfully!
         </div>
       )}
+
+      </>}
     </div>
   );
 }
