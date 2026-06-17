@@ -13,7 +13,7 @@ const bullets = [
 
 export default function SecurityBand({ onToast }: { onToast: (msg: string) => void }) {
   return (
-    <section id="security" className="py-20 bg-slate-900 dark:bg-slate-950 relative overflow-hidden">
+    <section id="security" className="py-24 bg-slate-900 dark:bg-slate-950 relative overflow-hidden">
       <div className="absolute inset-0 grid-bg opacity-30" />
       <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
 
