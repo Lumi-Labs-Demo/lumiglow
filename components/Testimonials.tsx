@@ -23,7 +23,7 @@ export default function Testimonials() {
             >
               <Quote size={24} className="text-amber-400 mb-4" />
               <p className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed flex-1">&ldquo;{t.quote}&rdquo;</p>
-              <div className="flex items-center gap-3 mt-6 pt-4 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
                 <div className={`w-9 h-9 rounded-full ${t.avatarColor} flex items-center justify-center text-white text-xs font-bold shrink-0`}>
                   {t.initials}
                 </div>

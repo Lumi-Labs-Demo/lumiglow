@@ -56,7 +56,7 @@ export default function Hero({ onPreview }: { onPreview: () => void }) {
         </div>
 
         {/* Stats */}
-        <div className="mt-16 grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl mx-auto animate-slide-up">
+        <div className="mt-16 grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-3xl mx-auto animate-slide-up">
           {stats.map(({ icon: Icon, label, value }) => (
             <div
               key={label}

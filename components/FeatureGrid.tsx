@@ -89,7 +89,7 @@ export default function FeatureGrid() {
                 <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-2">{f.title}</h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">{f.description}</p>
                 {f.integrations && (
-                  <div className="flex flex-wrap gap-1.5 mt-3">
+                  <div className="flex flex-wrap gap-1.5 mt-4">
                     {f.integrations.map((name) => (
                       <span
                         key={name}

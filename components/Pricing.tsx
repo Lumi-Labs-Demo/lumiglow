@@ -37,7 +37,7 @@ export default function Pricing() {
                 </div>
               )}
 
-              <div className="mb-5">
+              <div className="mb-4">
                 <h3 className={cn("text-base font-semibold mb-1", tier.highlighted ? "text-white" : "text-slate-900 dark:text-white")}>
                   {tier.name}
                 </h3>
@@ -57,7 +57,7 @@ export default function Pricing() {
               <button
                 onClick={() => setModal({ open: true, tier: tier.name })}
                 className={cn(
-                  "w-full py-2.5 rounded-xl text-sm font-semibold mb-6 transition-all",
+                  "w-full py-2.5 rounded-xl text-sm font-semibold mb-4 transition-all",
                   tier.highlighted
                     ? "bg-amber-500 hover:bg-amber-400 text-white shadow-lg shadow-amber-500/30"
                     : "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-white"
