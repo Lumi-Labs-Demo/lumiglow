@@ -12,6 +12,7 @@ import FAQ from "@/components/FAQ";
 import Footer from "@/components/Footer";
 import Modal from "@/components/Modal";
 import Toast from "@/components/Toast";
+import SupportChat from "@/components/SupportChat";
 
 export default function HomePage() {
   const [demoModal, setDemoModal] = useState(false);
@@ -95,6 +96,9 @@ export default function HomePage() {
       )}
 
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+
+      {/* AI Support Chat */}
+      <SupportChat />
     </>
   );
 }
