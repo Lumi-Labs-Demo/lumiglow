@@ -582,6 +582,74 @@ function SettingsPanel({
   );
 }
 
+// ─── Tableau Integration Data ─────────────────────────────────────────────────
+
+const TABLEAU_DASHBOARDS = [
+  { id: "td1", name: "Energy Consumption Overview",  workbook: "Facilities Analytics", views: 1240, lastRefresh: "2 min ago",   status: "live"    },
+  { id: "td2", name: "Zone Efficiency Heatmap",       workbook: "Facilities Analytics", views: 876,  lastRefresh: "5 min ago",   status: "live"    },
+  { id: "td3", name: "Carbon Footprint Tracker",      workbook: "ESG Reports",          views: 432,  lastRefresh: "1 hour ago",  status: "live"    },
+  { id: "td4", name: "Predictive Maintenance Report", workbook: "Operations",           views: 215,  lastRefresh: "6 hours ago", status: "pending" },
+];
+
+const TABLEAU_PERM_MAP = [
+  { lumiRole: "Facility Manager",  tableauRole: "Explorer",     status: "mapped"   },
+  { lumiRole: "Energy Analyst",    tableauRole: "Explorer",     status: "mapped"   },
+  { lumiRole: "Admin",             tableauRole: "Site Admin",   status: "mapped"   },
+  { lumiRole: "Read-Only Viewer",  tableauRole: "Viewer",       status: "mapped"   },
+  { lumiRole: "API Service Acct",  tableauRole: "Unlicensed",   status: "pending"  },
+];
+
+const TABLEAU_ACTIVITY = [
+  { ts: "Today 12:18",  event: "Dashboard data refreshed",        detail: "4 dashboards",  ok: true  },
+  { ts: "Today 08:00",  event: "OAuth token auto-renewed",         detail: "",              ok: true  },
+  { ts: "Yesterday",    event: "Permission sync completed",        detail: "18 users",      ok: true  },
+  { ts: "May 19",       event: "Embed token expiry – 2 failures",  detail: "2 errors",      ok: false },
+];
+
+function TableauLogo({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="28" height="28" rx="6" fill="#E8762D"/>
+      <path d="M13 4h2v5h5v2h-5v5h-2v-5H8V9h5V4Z" fill="white"/>
+      <path d="M6 14h2v4h4v2H8v4H6v-4H2v-2h4v-4Z" fill="white" opacity=".8"/>
+      <path d="M20 14h2v4h4v2h-4v4h-2v-4h-4v-2h4v-4Z" fill="white" opacity=".8"/>
+      <path d="M13 19h2v3h3v2h-3v3h-2v-3h-3v-2h3v-3Z" fill="white" opacity=".6"/>
+    </svg>
+  );
+}
+
+// ─── Integrations Tabs Wrapper ────────────────────────────────────────────────
+
+function IntegrationsTabs() {
+  const [activeInt, setActiveInt] = useState<"hubspot" | "tableau">("hubspot");
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 w-fit">
+        {([
+          { id: "hubspot" as const, label: "HubSpot CRM" },
+          { id: "tableau" as const, label: "Tableau Cloud" },
+        ] as { id: "hubspot" | "tableau"; label: string }[]).map(item => (
+          <button
+            key={item.id}
+            onClick={() => setActiveInt(item.id)}
+            className={cn(
+              "flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all",
+              activeInt === item.id
+                ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm"
+                : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+            )}
+          >
+            {item.id === "tableau" && <span className="inline-flex"><TableauLogo size={14} /></span>}
+            {item.label}
+          </button>
+        ))}
+      </div>
+      {activeInt === "hubspot" && <IntegrationsPanel />}
+      {activeInt === "tableau" && <TableauPanel />}
+    </div>
+  );
+}
+
 // ─── HubSpot Integration Panel ───────────────────────────────────────────────
 
 const FIELD_MAPPINGS = [
@@ -803,6 +871,377 @@ function IntegrationsPanel() {
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-slate-900 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-xl">
           <CheckCircle2 size={15} className="text-green-400 shrink-0" />
           Sync triggered successfully!
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Tableau Integration Panel ────────────────────────────────────────────────
+
+function TableauPanel() {
+  const [connected, setConnected]         = useState(false);
+  const [connecting, setConnecting]       = useState(false);
+  const [refreshing, setRefreshing]       = useState(false);
+  const [refreshFreq, setRefreshFreq]     = useState("15");
+  const [embedEnabled, setEmbedEnabled]   = useState(true);
+  const [permSync, setPermSync]           = useState(true);
+  const [refreshToast, setRefreshToast]   = useState(false);
+  const [activeEmbed, setActiveEmbed]     = useState<string | null>(null);
+  const [embedLoading, setEmbedLoading]   = useState(false);
+
+  function handleConnect() {
+    setConnecting(true);
+    setTimeout(() => { setConnecting(false); setConnected(true); }, 2000);
+  }
+
+  function handleRefresh() {
+    setRefreshing(true);
+    setTimeout(() => {
+      setRefreshing(false);
+      setRefreshToast(true);
+      setTimeout(() => setRefreshToast(false), 2500);
+    }, 1800);
+  }
+
+  function handleEmbedOpen(id: string) {
+    setEmbedLoading(true);
+    setActiveEmbed(id);
+    setTimeout(() => setEmbedLoading(false), 1400);
+  }
+
+  const activeDashboard = TABLEAU_DASHBOARDS.find(d => d.id === activeEmbed);
+
+  return (
+    <div className="max-w-2xl space-y-6">
+
+      {/* ── Connection Card ── */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 overflow-hidden">
+            <TableauLogo size={40} />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Tableau Cloud</h3>
+            <p className="text-xs text-slate-400 dark:text-slate-500">Embed dashboards &amp; sync analytics data</p>
+          </div>
+          {connected ? (
+            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2.5 py-1 rounded-full">
+              <CheckCircle2 size={11} /> Connected
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full">
+              <AlertCircle size={11} /> Not connected
+            </span>
+          )}
+        </div>
+
+        {!connected ? (
+          <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 p-4 mb-4">
+            <p className="text-xs text-slate-600 dark:text-slate-300 mb-3">
+              Connect your Tableau Cloud site to embed dashboards directly in LumiGlow.
+              You&apos;ll be redirected to Tableau to authorise access via OAuth 2.0.
+            </p>
+            <ul className="space-y-1.5 mb-4">
+              {[
+                "Read workbooks & embedded views",
+                "Embed dashboards via JavaScript API",
+                "Sync data refresh on configurable intervals",
+                "Map LumiGlow roles to Tableau permissions",
+              ].map(s => (
+                <li key={s} className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                  <CheckCircle2 size={12} className="text-green-500 shrink-0" />
+                  {s}
+                </li>
+              ))}
+            </ul>
+            <button
+              onClick={handleConnect}
+              disabled={connecting}
+              className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition-all disabled:opacity-70"
+              style={{ background: connecting ? "#94a3b8" : "#E8762D" }}
+            >
+              {connecting
+                ? <><RefreshCw size={14} className="animate-spin" /> Connecting…</>
+                : <><Link2 size={14} /> Connect Tableau Cloud</>}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="rounded-xl border border-green-100 dark:border-green-500/20 bg-green-50 dark:bg-green-500/5 p-4 flex items-center gap-3">
+              <Globe size={15} className="text-green-500 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">lumiglow.tableau.com</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">OAuth 2.0 token active · Expires in 87 days · Site: LumiGlow-Prod</p>
+              </div>
+              <button
+                onClick={() => setConnected(false)}
+                className="text-[11px] text-red-500 hover:text-red-400 font-medium shrink-0"
+              >
+                Disconnect
+              </button>
+            </div>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-60"
+            >
+              <RefreshCw size={13} className={refreshing ? "animate-spin" : ""} />
+              {refreshing ? "Refreshing data…" : "Refresh all dashboards"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ── Embedded Dashboards ── */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-1">
+          <BarChart3 size={15} className="text-orange-500" />
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Embedded Dashboards</h3>
+          {connected && (
+            <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-orange-50 dark:bg-orange-500/15 text-orange-600 dark:text-orange-400">
+              {TABLEAU_DASHBOARDS.length} dashboards
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">
+          {connected ? "Click any dashboard to preview the embedded view." : "Connect to Tableau Cloud to enable dashboard embedding."}
+        </p>
+
+        {!connected ? (
+          <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/30 p-6 text-center">
+            <BarChart3 size={28} className="text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+            <p className="text-xs text-slate-400 dark:text-slate-500">No dashboards available</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {TABLEAU_DASHBOARDS.map(dash => (
+              <button
+                key={dash.id}
+                onClick={() => handleEmbedOpen(dash.id)}
+                className="w-full text-left flex items-center gap-3 p-3 rounded-xl border border-slate-100 dark:border-slate-800 hover:border-orange-200 dark:hover:border-orange-500/30 hover:bg-orange-50 dark:hover:bg-orange-500/5 transition-all group"
+              >
+                <div className="w-8 h-8 rounded-lg bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center shrink-0">
+                  <BarChart3 size={14} className="text-orange-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">
+                    {dash.name}
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5 truncate">{dash.workbook} · {dash.views.toLocaleString()} views</p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <span className={cn(
+                    "inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full mb-0.5",
+                    dash.status === "live"
+                      ? "bg-green-50 text-green-600 dark:bg-green-500/15 dark:text-green-400"
+                      : "bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400"
+                  )}>
+                    {dash.status === "live" ? <><CheckCircle2 size={8} /> live</> : <><Clock size={8} /> pending</>}
+                  </span>
+                  <p className="text-[10px] text-slate-400">{dash.lastRefresh}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Embed preview modal */}
+        {activeEmbed && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="w-full max-w-3xl rounded-2xl bg-white dark:bg-slate-900 shadow-2xl overflow-hidden">
+              <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100 dark:border-slate-800">
+                <div className="w-7 h-7 rounded-lg overflow-hidden shrink-0"><TableauLogo size={28} /></div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{activeDashboard?.name}</p>
+                  <p className="text-[11px] text-slate-400">{activeDashboard?.workbook} · lumiglow.tableau.com</p>
+                </div>
+                <button
+                  onClick={() => { setActiveEmbed(null); setEmbedLoading(false); }}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors shrink-0"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="relative bg-slate-50 dark:bg-slate-800/50" style={{ height: 380 }}>
+                {embedLoading ? (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                    <RefreshCw size={24} className="text-orange-400 animate-spin" />
+                    <p className="text-xs text-slate-400">Loading Tableau dashboard…</p>
+                  </div>
+                ) : (
+                  <div className="absolute inset-0 flex flex-col">
+                    <div className="flex-1 p-4 flex flex-col gap-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Live data · Refreshed {activeDashboard?.lastRefresh}</span>
+                        </div>
+                        <span className="text-[10px] text-orange-500 font-semibold">Tableau Embedded View</span>
+                      </div>
+                      <div className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 overflow-hidden">
+                        <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-3">{activeDashboard?.name}</p>
+                        <div className="flex items-end gap-2 h-36">
+                          {[65, 82, 54, 91, 70, 88, 45, 76, 93, 60, 78, 85].map((v, i) => (
+                            <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                              <div
+                                className="w-full rounded-t-sm"
+                                style={{
+                                  height: `${v}%`,
+                                  background: i % 3 === 0 ? "#E8762D" : i % 3 === 1 ? "#f59e0b" : "#94a3b8",
+                                  opacity: 0.75 + (i % 4) * 0.07,
+                                }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                          <div className="flex items-center gap-3">
+                            {[["#E8762D", "Zone A"], ["#f59e0b", "Zone B"], ["#94a3b8", "Zone C"]].map(([c, l]) => (
+                              <div key={l} className="flex items-center gap-1.5">
+                                <div className="w-2 h-2 rounded-sm" style={{ background: c }} />
+                                <span className="text-[10px] text-slate-400">{l}</span>
+                              </div>
+                            ))}
+                          </div>
+                          <span className="text-[10px] text-slate-400">Last 12 hours</span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[["Peak Usage", "891 kWh", "text-red-500"], ["Avg Efficiency", "87.4%", "text-green-500"], ["Cost Savings", "$1,240", "text-orange-500"]].map(([l, v, c]) => (
+                          <div key={l} className="rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 text-center">
+                            <p className="text-[10px] text-slate-400 mb-0.5">{l}</p>
+                            <p className={cn("text-sm font-bold", c)}>{v}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 px-5 py-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40">
+                <span className="text-[11px] text-slate-400 flex-1">Embedded via Tableau JavaScript API · OAuth 2.0 authenticated</span>
+                <button
+                  onClick={() => { setActiveEmbed(null); setEmbedLoading(false); }}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Data Refresh Settings ── */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-5">
+          <RefreshCw size={15} className="text-orange-500" />
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Data refresh settings</h3>
+        </div>
+        {[
+          { label: "Enable dashboard embedding",  sub: "Render Tableau views inside LumiGlow via JS API", val: embedEnabled, set: setEmbedEnabled },
+          { label: "Auto permission sync",        sub: "Map LumiGlow roles to Tableau entitlements",      val: permSync,     set: setPermSync     },
+        ].map(row => (
+          <div key={row.label} className="flex items-center justify-between py-3.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
+            <div>
+              <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{row.label}</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">{row.sub}</p>
+            </div>
+            <button
+              onClick={() => row.set(!row.val)}
+              className={cn("transition-colors shrink-0 ml-4", row.val ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}
+            >
+              {row.val ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+            </button>
+          </div>
+        ))}
+        <div className="pt-4">
+          <label className="text-sm text-slate-800 dark:text-slate-200 font-medium block mb-1.5">Data refresh interval</label>
+          <select
+            value={refreshFreq}
+            onChange={e => setRefreshFreq(e.target.value)}
+            className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+          >
+            <option value="5">Every 5 minutes</option>
+            <option value="15">Every 15 minutes</option>
+            <option value="60">Every hour</option>
+            <option value="360">Every 6 hours</option>
+            <option value="1440">Daily</option>
+          </select>
+        </div>
+      </div>
+
+      {/* ── Permission Mapping ── */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-5">
+          <ShieldCheck size={15} className="text-orange-500" />
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Permission mapping</h3>
+          <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500">Read-only</span>
+        </div>
+        <div className="overflow-x-auto -mx-1">
+          <table className="w-full text-xs min-w-[380px]">
+            <thead>
+              <tr className="border-b border-slate-100 dark:border-slate-800">
+                <th className="text-left font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">LumiGlow role</th>
+                <th className="text-center font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1 w-8">→</th>
+                <th className="text-left font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Tableau role</th>
+                <th className="text-right font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {TABLEAU_PERM_MAP.map((m, i) => (
+                <tr key={i} className="border-b border-slate-50 dark:border-slate-800/60 last:border-0">
+                  <td className="py-2.5 px-1 text-slate-700 dark:text-slate-300 font-medium">{m.lumiRole}</td>
+                  <td className="py-2.5 px-1 text-center text-slate-300 dark:text-slate-600">→</td>
+                  <td className="py-2.5 px-1 text-slate-500 dark:text-slate-400">{m.tableauRole}</td>
+                  <td className="py-2.5 px-1 text-right">
+                    {m.status === "mapped" ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-1.5 py-0.5 rounded-full">
+                        <CheckCircle2 size={9} /> mapped
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/15 px-1.5 py-0.5 rounded-full">
+                        <Clock size={9} /> pending
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ── Activity Log ── */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-4">
+          <Clock size={15} className="text-orange-500" />
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Recent activity</h3>
+        </div>
+        <div className="space-y-2">
+          {TABLEAU_ACTIVITY.map((l, i) => (
+            <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+              {l.ok
+                ? <CheckCircle2 size={13} className="text-green-500 shrink-0" />
+                : <AlertCircle size={13} className="text-red-500 shrink-0" />
+              }
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{l.event}</p>
+                {l.detail && <p className="text-[11px] text-slate-400 mt-0.5">{l.detail}</p>}
+              </div>
+              <p className="text-[11px] text-slate-400 shrink-0">{l.ts}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {refreshToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-slate-900 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-xl">
+          <CheckCircle2 size={15} className="text-green-400 shrink-0" />
+          All dashboards refreshed!
         </div>
       )}
     </div>
@@ -1376,7 +1815,7 @@ export default function DashboardPage() {
           )}
 
           {/* ── INTEGRATIONS ── */}
-          {tab === "integrations" && <IntegrationsPanel />}
+          {tab === "integrations" && <IntegrationsTabs />}
 
           {/* ── SETTINGS ── */}
           {tab === "settings" && <SettingsPanel branding={branding} onBrandingChange={setBranding} />}
