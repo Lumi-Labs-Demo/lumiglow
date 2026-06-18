@@ -9,7 +9,7 @@ import {
   TrendingDown, Activity, Users, ShieldCheck, Search,
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
   Palette, Upload, Eye, Plug, RefreshCw, ArrowLeftRight,
-  Database, Globe, Link2, AlertCircle, Clock,
+  Database, Globe, Link2, AlertCircle, Clock, MessageCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -582,6 +582,25 @@ function SettingsPanel({
   );
 }
 
+// ─── Intercom data ────────────────────────────────────────────────────────────
+
+const INTERCOM_FIELD_MAPPINGS = [
+  { source: "Intercom Conversation ID", target: "LumiGlow Support Ticket ID", status: "synced"  },
+  { source: "Contact Email",            target: "User Email",                  status: "synced"  },
+  { source: "Conversation Subject",     target: "Ticket Title",                status: "synced"  },
+  { source: "Conversation Body",        target: "Ticket Description",          status: "synced"  },
+  { source: "Assignee",                 target: "Support Agent",               status: "pending" },
+  { source: "Tags",                     target: "Ticket Labels",               status: "pending" },
+  { source: "Conversation State",       target: "Ticket Status",               status: "synced"  },
+];
+
+const INTERCOM_ACTIVITY_LOG = [
+  { ts: "Today 14:22",   event: "Conversation sync completed",     count: "67 conversations", ok: true  },
+  { ts: "Today 08:01",   event: "Webhook batch processed",         count: "14 events",        ok: true  },
+  { ts: "Yesterday",     event: "OAuth token refreshed",           count: "",                 ok: true  },
+  { ts: "May 19",        event: "Conversation sync – rate limited", count: "Retry scheduled", ok: false },
+];
+
 // ─── HubSpot Integration Panel ───────────────────────────────────────────────
 
 const FIELD_MAPPINGS = [
@@ -602,6 +621,7 @@ const SYNC_LOG = [
 ];
 
 function IntegrationsPanel() {
+  // HubSpot state
   const [connected, setConnected]         = useState(false);
   const [connecting, setConnecting]       = useState(false);
   const [syncContacts, setSyncContacts]   = useState(true);
@@ -609,6 +629,17 @@ function IntegrationsPanel() {
   const [syncFreq, setSyncFreq]           = useState("15");
   const [syncing, setSyncing]             = useState(false);
   const [syncToast, setSyncToast]         = useState(false);
+
+  // Intercom state
+  const [icConnected, setIcConnected]           = useState(false);
+  const [icConnecting, setIcConnecting]         = useState(false);
+  const [icSyncConvs, setIcSyncConvs]           = useState(true);
+  const [icSyncUsers, setIcSyncUsers]           = useState(true);
+  const [icWebhooks, setIcWebhooks]             = useState(true);
+  const [icSyncFreq, setIcSyncFreq]             = useState("15");
+  const [icSyncing, setIcSyncing]               = useState(false);
+  const [icSyncToast, setIcSyncToast]           = useState(false);
+  const [icActiveTab, setIcActiveTab]           = useState<"settings" | "mapping" | "activity">("settings");
 
   function handleConnect() {
     setConnecting(true);
@@ -618,6 +649,16 @@ function IntegrationsPanel() {
   function handleSync() {
     setSyncing(true);
     setTimeout(() => { setSyncing(false); setSyncToast(true); setTimeout(() => setSyncToast(false), 2500); }, 2000);
+  }
+
+  function handleIcConnect() {
+    setIcConnecting(true);
+    setTimeout(() => { setIcConnecting(false); setIcConnected(true); }, 1800);
+  }
+
+  function handleIcSync() {
+    setIcSyncing(true);
+    setTimeout(() => { setIcSyncing(false); setIcSyncToast(true); setTimeout(() => setIcSyncToast(false), 2500); }, 2000);
   }
 
   return (
@@ -798,6 +839,218 @@ function IntegrationsPanel() {
           ))}
         </div>
       </div>
+
+      {/* ── Intercom Support Integration ── */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center gap-3 mb-5">
+          {/* Intercom logo mark */}
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: "#286efa" }}>
+            <svg viewBox="0 0 28 28" className="w-5 h-5 fill-white" xmlns="http://www.w3.org/2000/svg">
+              <path d="M14 2C7.373 2 2 7.373 2 14c0 2.09.538 4.053 1.48 5.762L2.05 24.4a.75.75 0 0 0 .95.95l4.638-1.43A11.94 11.94 0 0 0 14 26c6.627 0 12-5.373 12-12S20.627 2 14 2Zm-4.5 9.25a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5Zm4.5 0a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5Zm4.5 0a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5Z"/>
+            </svg>
+          </div>
+          <div className="flex-1">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Intercom Support</h3>
+            <p className="text-xs text-slate-400 dark:text-slate-500">Sync conversations &amp; user context</p>
+          </div>
+          {icConnected ? (
+            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2.5 py-1 rounded-full">
+              <CheckCircle2 size={11} /> Connected
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full">
+              <AlertCircle size={11} /> Not connected
+            </span>
+          )}
+        </div>
+
+        {!icConnected ? (
+          <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 p-4 mb-4">
+            <p className="text-xs text-slate-600 dark:text-slate-300 mb-3">
+              Connect your Intercom workspace to surface conversation context alongside lighting alerts and pull support contacts into LumiGlow.
+              OAuth 2.0 — no passwords stored.
+            </p>
+            <ul className="space-y-1.5 mb-4">
+              {[
+                "Read conversations & contact profiles",
+                "Receive webhook events in real time",
+                "Assign conversations from LumiGlow alerts",
+              ].map(s => (
+                <li key={s} className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                  <CheckCircle2 size={12} className="text-green-500 shrink-0" />
+                  {s}
+                </li>
+              ))}
+            </ul>
+            <button
+              onClick={handleIcConnect}
+              disabled={icConnecting}
+              className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition-all disabled:opacity-70"
+              style={{ background: icConnecting ? "#94a3b8" : "#286efa" }}
+            >
+              {icConnecting
+                ? <><RefreshCw size={14} className="animate-spin" /> Connecting…</>
+                : <><Link2 size={14} /> Connect Intercom</>}
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Connected banner */}
+            <div className="rounded-xl border border-blue-100 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/5 p-4 flex items-center gap-3 mb-4">
+              <Globe size={15} className="text-blue-500 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">acme-corp.intercom.io</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">OAuth token active · Expires in 89 days</p>
+              </div>
+              <button
+                onClick={() => setIcConnected(false)}
+                className="text-[11px] text-red-500 hover:text-red-400 font-medium shrink-0"
+              >
+                Disconnect
+              </button>
+            </div>
+
+            {/* Sub-tabs */}
+            <div className="flex gap-1 mb-5 bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
+              {(["settings", "mapping", "activity"] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setIcActiveTab(t)}
+                  className={cn(
+                    "flex-1 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all",
+                    icActiveTab === t
+                      ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm"
+                      : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                  )}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+
+            {/* Settings tab */}
+            {icActiveTab === "settings" && (
+              <div className="space-y-1">
+                {[
+                  { label: "Conversation sync",    sub: "Import open & pending conversations into support tickets",          val: icSyncConvs, set: setIcSyncConvs },
+                  { label: "User sync",             sub: "Pull Intercom contacts into LumiGlow user profiles",                val: icSyncUsers, set: setIcSyncUsers  },
+                  { label: "Webhook events",        sub: "Receive real-time conversation updates via Intercom webhooks",      val: icWebhooks,  set: setIcWebhooks   },
+                ].map(row => (
+                  <div key={row.label} className="flex items-center justify-between py-3.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
+                    <div>
+                      <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{row.label}</p>
+                      <p className="text-xs text-slate-400 dark:text-slate-500">{row.sub}</p>
+                    </div>
+                    <button
+                      onClick={() => row.set(!row.val)}
+                      className={cn("transition-colors shrink-0 ml-4", row.val ? "text-blue-500" : "text-slate-300 dark:text-slate-600")}
+                    >
+                      {row.val ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+                    </button>
+                  </div>
+                ))}
+                <div className="pt-4 flex items-center gap-3 flex-wrap">
+                  <div>
+                    <label className="text-sm text-slate-800 dark:text-slate-200 font-medium block mb-1.5">Sync frequency</label>
+                    <select
+                      value={icSyncFreq}
+                      onChange={e => setIcSyncFreq(e.target.value)}
+                      className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    >
+                      <option value="5">Every 5 minutes</option>
+                      <option value="15">Every 15 minutes</option>
+                      <option value="60">Every hour</option>
+                      <option value="360">Every 6 hours</option>
+                      <option value="1440">Daily</option>
+                    </select>
+                  </div>
+                  <button
+                    onClick={handleIcSync}
+                    disabled={icSyncing}
+                    className="mt-5 flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-60"
+                  >
+                    <RefreshCw size={13} className={icSyncing ? "animate-spin" : ""} />
+                    {icSyncing ? "Syncing…" : "Sync now"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Mapping tab */}
+            {icActiveTab === "mapping" && (
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <Database size={14} className="text-blue-500" />
+                  <span className="text-sm font-semibold text-slate-900 dark:text-white">Field mapping</span>
+                  <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500">Read-only</span>
+                </div>
+                <div className="overflow-x-auto -mx-1">
+                  <table className="w-full text-xs min-w-[400px]">
+                    <thead>
+                      <tr className="border-b border-slate-100 dark:border-slate-800">
+                        <th className="text-left font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Intercom field</th>
+                        <th className="text-center font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1 w-8">→</th>
+                        <th className="text-left font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">LumiGlow field</th>
+                        <th className="text-right font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {INTERCOM_FIELD_MAPPINGS.map((m, i) => (
+                        <tr key={i} className="border-b border-slate-50 dark:border-slate-800/60 last:border-0">
+                          <td className="py-2.5 px-1 text-slate-700 dark:text-slate-300 font-medium">{m.source}</td>
+                          <td className="py-2.5 px-1 text-center text-slate-300 dark:text-slate-600">→</td>
+                          <td className="py-2.5 px-1 text-slate-500 dark:text-slate-400">{m.target}</td>
+                          <td className="py-2.5 px-1 text-right">
+                            {m.status === "synced" ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-1.5 py-0.5 rounded-full">
+                                <CheckCircle2 size={9} /> synced
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/15 px-1.5 py-0.5 rounded-full">
+                                <Clock size={9} /> pending
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Activity tab */}
+            {icActiveTab === "activity" && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 mb-3">
+                  <Clock size={14} className="text-blue-500" />
+                  <span className="text-sm font-semibold text-slate-900 dark:text-white">Recent activity</span>
+                </div>
+                {INTERCOM_ACTIVITY_LOG.map((l, i) => (
+                  <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                    {l.ok
+                      ? <CheckCircle2 size={13} className="text-green-500 shrink-0" />
+                      : <AlertCircle size={13} className="text-red-500 shrink-0" />
+                    }
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{l.event}</p>
+                      {l.count && <p className="text-[11px] text-slate-400 mt-0.5">{l.count}</p>}
+                    </div>
+                    <p className="text-[11px] text-slate-400 shrink-0">{l.ts}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {icSyncToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-slate-900 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-xl">
+          <CheckCircle2 size={15} className="text-green-400 shrink-0" />
+          Intercom sync triggered!
+        </div>
+      )}
 
       {syncToast && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-slate-900 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-xl">
