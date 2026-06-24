@@ -9,7 +9,8 @@ import {
   TrendingDown, Activity, Users, ShieldCheck, Search,
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
   Palette, Upload, Eye, Plug, RefreshCw, ArrowLeftRight,
-  Database, Globe, Link2, AlertCircle, Clock,
+  Database, Globe, Link2, AlertCircle, Clock, Hash, Tag,
+  MessageSquare, Send, Inbox,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -584,6 +585,301 @@ function SettingsPanel({
 
 // ─── HubSpot Integration Panel ───────────────────────────────────────────────
 
+// ─── Slack Integration Data ──────────────────────────────────────────────────
+
+type SlackCategory = "Idea" | "Bug" | "Feature" | "Uncategorized";
+type SlackStatus = "New" | "In Review" | "Done";
+
+interface SlackMessage {
+  id: string;
+  user: string;
+  avatar: string;
+  text: string;
+  ts: string;
+  category: SlackCategory;
+  status: SlackStatus;
+}
+
+const INITIAL_SLACK_MESSAGES: SlackMessage[] = [
+  { id: "s1", user: "alex.rivera", avatar: "AR", text: "Would love a way to group zones across buildings into 'scenes' — e.g. all lobbies to 60% at 6 PM.", ts: "Today 11:42", category: "Idea", status: "In Review" },
+  { id: "s2", user: "priya.nair", avatar: "PN", text: "The schedule override isn't saving after I refresh the page. Reproducible on Chrome 125.", ts: "Today 10:18", category: "Bug", status: "New" },
+  { id: "s3", user: "sam.chen", avatar: "SC", text: "Feature request: export energy reports as PDF, not just CSV.", ts: "Yesterday 4:55 PM", category: "Feature", status: "New" },
+  { id: "s4", user: "morgan.k", avatar: "MK", text: "Dark mode in the dashboard looks great! The alerts tab is a bit hard to read though.", ts: "Yesterday 2:30 PM", category: "Bug", status: "Done" },
+];
+
+const CATEGORY_COLORS: Record<SlackCategory, string> = {
+  Idea:          "bg-purple-50 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300",
+  Bug:           "bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+  Feature:       "bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
+  Uncategorized: "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400",
+};
+
+const STATUS_COLORS: Record<SlackStatus, string> = {
+  New:         "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+  "In Review": "bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
+  Done:        "bg-green-50 text-green-700 dark:bg-green-500/15 dark:text-green-300",
+};
+
+function SlackLogo({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z" fill="white"/>
+    </svg>
+  );
+}
+
+function SlackIntegrationSection() {
+  const [slackConnected, setSlackConnected]   = useState(false);
+  const [slackConnecting, setSlackConnecting] = useState(false);
+  const [channel, setChannel]                 = useState("#feedback");
+  const [messages, setMessages]               = useState<SlackMessage[]>(INITIAL_SLACK_MESSAGES);
+  const [autoCapture, setAutoCapture]         = useState(true);
+  const [notifyTeam, setNotifyTeam]           = useState(true);
+  const [statusSync, setStatusSync]           = useState(true);
+  const [simulating, setSimulating]           = useState(false);
+  const [slackToast, setSlackToast]           = useState<string | null>(null);
+
+  function handleSlackConnect() {
+    setSlackConnecting(true);
+    setTimeout(() => { setSlackConnecting(false); setSlackConnected(true); }, 1800);
+  }
+
+  function updateCategory(id: string, cat: SlackCategory) {
+    setMessages(prev => prev.map(m => m.id === id ? { ...m, category: cat } : m));
+  }
+
+  function updateStatus(id: string, status: SlackStatus) {
+    setMessages(prev => prev.map(m => m.id === id ? { ...m, status } : m));
+    if (statusSync) {
+      setSlackToast("Status synced back to Slack thread ✓");
+      setTimeout(() => setSlackToast(null), 2500);
+    }
+  }
+
+  function simulateIncoming() {
+    setSimulating(true);
+    setTimeout(() => {
+      const newMsg: SlackMessage = {
+        id: `s${Date.now()}`,
+        user: "jordan.lee",
+        avatar: "JL",
+        text: "Can we add per-floor energy usage breakdowns to the reports tab? Would help with our sustainability audit.",
+        ts: "Just now",
+        category: "Idea",
+        status: "New",
+      };
+      setMessages(prev => [newMsg, ...prev]);
+      setSimulating(false);
+      setSlackToast("New message captured from #feedback!");
+      setTimeout(() => setSlackToast(null), 2500);
+    }, 1400);
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Divider */}
+      <div className="flex items-center gap-3 pt-2">
+        <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700/60" />
+        <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Slack Integration</span>
+        <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700/60" />
+      </div>
+
+      {/* ── Connection Card ── */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: "#4A154B" }}>
+            <SlackLogo size={20} />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Slack — Feature Request Capture</h3>
+            <p className="text-xs text-slate-400 dark:text-slate-500">Auto-capture feedback from a Slack channel</p>
+          </div>
+          {slackConnected ? (
+            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2.5 py-1 rounded-full">
+              <CheckCircle2 size={11} /> Connected
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full">
+              <AlertCircle size={11} /> Not connected
+            </span>
+          )}
+        </div>
+
+        {!slackConnected ? (
+          <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 p-4 mb-4">
+            <p className="text-xs text-slate-600 dark:text-slate-300 mb-3">
+              Connect your Slack workspace to automatically capture feature requests posted in a designated channel and create tracked items in LumiGlow.
+            </p>
+            <ul className="space-y-1.5 mb-4">
+              {[
+                "Auto-capture messages as feature requests",
+                "Categorize as Bug / Idea / Feature",
+                "Notify product team on new submissions",
+                "Sync status updates back to Slack thread",
+              ].map(s => (
+                <li key={s} className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                  <CheckCircle2 size={12} className="text-green-500 shrink-0" />
+                  {s}
+                </li>
+              ))}
+            </ul>
+            <button
+              onClick={handleSlackConnect}
+              disabled={slackConnecting}
+              className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition-all disabled:opacity-70"
+              style={{ background: slackConnecting ? "#94a3b8" : "#4A154B" }}
+            >
+              {slackConnecting
+                ? <><RefreshCw size={14} className="animate-spin" /> Connecting…</>
+                : <><SlackLogo size={14} /> Add to Slack</>}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="rounded-xl border border-green-100 dark:border-green-500/20 bg-green-50 dark:bg-green-500/5 p-4 flex items-center gap-3">
+              <Globe size={15} className="text-green-500 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">lumiglow.slack.com</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">OAuth token active · Bot user connected</p>
+              </div>
+              <button
+                onClick={() => setSlackConnected(false)}
+                className="text-[11px] text-red-500 hover:text-red-400 font-medium shrink-0"
+              >
+                Disconnect
+              </button>
+            </div>
+
+            {/* Channel selector */}
+            <div className="flex items-center gap-2">
+              <Hash size={13} className="text-slate-400 shrink-0" />
+              <label className="text-xs font-medium text-slate-600 dark:text-slate-400 shrink-0">Monitoring channel:</label>
+              <select
+                value={channel}
+                onChange={e => setChannel(e.target.value)}
+                className="flex-1 px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-400"
+              >
+                <option>#feedback</option>
+                <option>#product-requests</option>
+                <option>#feature-ideas</option>
+                <option>#general</option>
+              </select>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Automation Settings ── (only when connected) */}
+      {slackConnected && (
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-5">
+            <ArrowLeftRight size={15} className="text-amber-500" />
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Automation settings</h3>
+          </div>
+          {[
+            { label: "Auto-capture messages",  sub: `Automatically create items from ${channel} posts`,      val: autoCapture, set: setAutoCapture },
+            { label: "Notify product team",    sub: "Post alert in #product-team when a request is captured", val: notifyTeam,  set: setNotifyTeam  },
+            { label: "Status sync to Slack",   sub: "Reply in Slack thread when item status changes",          val: statusSync,  set: setStatusSync  },
+          ].map(row => (
+            <div key={row.label} className="flex items-center justify-between py-3.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
+              <div>
+                <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{row.label}</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500">{row.sub}</p>
+              </div>
+              <button
+                onClick={() => row.set(!row.val)}
+                className={cn("transition-colors shrink-0 ml-4", row.val ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}
+              >
+                {row.val ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Captured Requests ── (only when connected) */}
+      {slackConnected && (
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-5">
+            <Inbox size={15} className="text-amber-500" />
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Captured requests</h3>
+            <span className="ml-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300">
+              {channel}
+            </span>
+            <button
+              onClick={simulateIncoming}
+              disabled={simulating}
+              className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-60"
+            >
+              <Send size={11} className={simulating ? "animate-bounce" : ""} />
+              {simulating ? "Capturing…" : "Simulate message"}
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {messages.map(msg => (
+              <div key={msg.id} className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[11px] font-bold text-white shrink-0" style={{ background: "#4A154B" }}>
+                    {msg.avatar}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">@{msg.user}</span>
+                      <span className="text-[10px] text-slate-400">{msg.ts}</span>
+                    </div>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed mb-3">{msg.text}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex items-center gap-1">
+                        <Tag size={10} className="text-slate-400 shrink-0" />
+                        <select
+                          value={msg.category}
+                          onChange={e => updateCategory(msg.id, e.target.value as SlackCategory)}
+                          className={cn(
+                            "text-[10px] font-semibold px-2 py-0.5 rounded-full border-0 focus:ring-2 focus:ring-amber-400 focus:outline-none cursor-pointer",
+                            CATEGORY_COLORS[msg.category]
+                          )}
+                        >
+                          <option>Idea</option>
+                          <option>Bug</option>
+                          <option>Feature</option>
+                          <option>Uncategorized</option>
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <MessageSquare size={10} className="text-slate-400 shrink-0" />
+                        <select
+                          value={msg.status}
+                          onChange={e => updateStatus(msg.id, e.target.value as SlackStatus)}
+                          className={cn(
+                            "text-[10px] font-semibold px-2 py-0.5 rounded-full border-0 focus:ring-2 focus:ring-amber-400 focus:outline-none cursor-pointer",
+                            STATUS_COLORS[msg.status]
+                          )}
+                        >
+                          <option>New</option>
+                          <option>In Review</option>
+                          <option>Done</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {slackToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-slate-900 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-xl">
+          <CheckCircle2 size={15} className="text-green-400 shrink-0" />
+          {slackToast}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const FIELD_MAPPINGS = [
   { source: "Zendesk Ticket ID",       target: "HubSpot Note ID",              status: "synced"  },
   { source: "Ticket Subject",          target: "Note Title",                   status: "synced"  },
@@ -805,6 +1101,8 @@ function IntegrationsPanel() {
           Sync triggered successfully!
         </div>
       )}
+
+      <SlackIntegrationSection />
     </div>
   );
 }
