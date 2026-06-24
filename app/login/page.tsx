@@ -166,7 +166,7 @@ export default function LoginPage() {
     setOauthStep("redirecting");
     setTimeout(() => setOauthStep("authenticating"), 1800);
     setTimeout(() => setOauthStep("success"), 3600);
-    setTimeout(() => router.push("/dashboard"), 5200);
+    setTimeout(() => router.push("/onboarding"), 5200);
   }
 
   function handleEmailSignIn(e: React.FormEvent) {
@@ -176,7 +176,7 @@ export default function LoginPage() {
       return;
     }
     setEmailError("");
-    router.push("/dashboard");
+    router.push("/onboarding");
   }
 
   return (
@@ -221,7 +221,7 @@ export default function LoginPage() {
                 </button>
 
                 <button
-                  onClick={() => router.push("/dashboard")}
+                  onClick={() => router.push("/onboarding")}
                   className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700/60 hover:border-slate-300 dark:hover:border-slate-600 transition-all shadow-sm hover:shadow group"
                 >
                   <GoogleIcon size={18} />

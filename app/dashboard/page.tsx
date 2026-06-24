@@ -9,7 +9,7 @@ import {
   TrendingDown, Activity, Users, ShieldCheck, Search,
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
   Palette, Upload, Eye, Plug, RefreshCw, ArrowLeftRight,
-  Database, Globe, Link2, AlertCircle, Clock,
+  Database, Globe, Link2, AlertCircle, Clock, Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -181,7 +181,7 @@ function ZoneRow({ zone, onToggle, onBrightness }: {
       {/* Toggle */}
       <button
         onClick={() => onToggle(zone.id)}
-        className={cn("shrink-0 transition-colors", zone.isOn ? "text-amber-500" : "text-slate-400 dark:text-slate-600")}
+        className={cn("shrink-0 transition-colors", zone.isOn ? "text-amber-500" : "text-slate-400 dark:text-slate-500")}
         aria-label={zone.isOn ? "Turn off" : "Turn on"}
       >
         {zone.isOn ? <ToggleRight size={26} /> : <ToggleLeft size={26} />}
@@ -209,7 +209,7 @@ function ZoneRow({ zone, onToggle, onBrightness }: {
 
       {/* Brightness */}
       <div className="hidden sm:flex items-center gap-2 w-32 shrink-0">
-        <Sun size={12} className={cn("shrink-0", zone.isOn ? "text-amber-400" : "text-slate-300 dark:text-slate-600")} />
+        <Sun size={12} className={cn("shrink-0", zone.isOn ? "text-amber-400" : "text-slate-300 dark:text-slate-500")} />
         <input
           type="range"
           min={0}
@@ -219,14 +219,14 @@ function ZoneRow({ zone, onToggle, onBrightness }: {
           onChange={e => onBrightness(zone.id, Number(e.target.value))}
           className={cn("flex-1 h-1.5 rounded-full appearance-none cursor-pointer accent-amber-400", !zone.isOn && "opacity-30 cursor-not-allowed")}
         />
-        <span className={cn("text-[11px] w-7 text-right font-mono", zone.isOn ? "text-slate-600 dark:text-slate-400" : "text-slate-300 dark:text-slate-600")}>
+        <span className={cn("text-[11px] w-7 text-right font-mono", zone.isOn ? "text-slate-600 dark:text-slate-400" : "text-slate-300 dark:text-slate-500")}>
           {zone.brightness}%
         </span>
       </div>
 
       {/* Watts */}
       <div className="shrink-0 text-right">
-        <span className={cn("text-sm font-bold tabular-nums", zone.isOn ? "text-slate-800 dark:text-slate-200" : "text-slate-300 dark:text-slate-600")}>
+        <span className={cn("text-sm font-bold tabular-nums", zone.isOn ? "text-slate-800 dark:text-slate-200" : "text-slate-300 dark:text-slate-500")}>
           {zone.powerWatts}W
         </span>
       </div>
@@ -363,7 +363,7 @@ function SettingsPanel({
               <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{row.label}</p>
               <p className="text-xs text-slate-400 dark:text-slate-500">{row.sub}</p>
             </div>
-            <button onClick={() => row.set(!row.val)} className={cn("transition-colors", row.val ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>
+            <button onClick={() => row.set(!row.val)} className={cn("transition-colors", row.val ? "text-amber-500" : "text-slate-300 dark:text-slate-500")}>
               {row.val ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
             </button>
           </div>
@@ -378,7 +378,7 @@ function SettingsPanel({
             <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">Auto-apply schedule policies</p>
             <p className="text-xs text-slate-400 dark:text-slate-500">System adjusts brightness automatically</p>
           </div>
-          <button onClick={() => setAutoPolicy(!autoPolicy)} className={cn("transition-colors", autoPolicy ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>
+          <button onClick={() => setAutoPolicy(!autoPolicy)} className={cn("transition-colors", autoPolicy ? "text-amber-500" : "text-slate-300 dark:text-slate-500")}>
             {autoPolicy ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
           </button>
         </div>
@@ -392,7 +392,7 @@ function SettingsPanel({
             <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">Two-factor authentication</p>
             <p className="text-xs text-slate-400 dark:text-slate-500">TOTP via authenticator app</p>
           </div>
-          <button onClick={() => setTwoFA(!twoFA)} className={cn("transition-colors", twoFA ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>
+          <button onClick={() => setTwoFA(!twoFA)} className={cn("transition-colors", twoFA ? "text-amber-500" : "text-slate-300 dark:text-slate-500")}>
             {twoFA ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
           </button>
         </div>
@@ -713,7 +713,7 @@ function IntegrationsPanel() {
             </div>
             <button
               onClick={() => row.set(!row.val)}
-              className={cn("transition-colors shrink-0 ml-4", row.val ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}
+              className={cn("transition-colors shrink-0 ml-4", row.val ? "text-amber-500" : "text-slate-300 dark:text-slate-500")}
             >
               {row.val ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
             </button>
@@ -756,7 +756,7 @@ function IntegrationsPanel() {
               {FIELD_MAPPINGS.map((m, i) => (
                 <tr key={i} className="border-b border-slate-50 dark:border-slate-800/60 last:border-0">
                   <td className="py-2.5 px-1 text-slate-700 dark:text-slate-300 font-medium">{m.source}</td>
-                  <td className="py-2.5 px-1 text-center text-slate-300 dark:text-slate-600">→</td>
+                  <td className="py-2.5 px-1 text-center text-slate-300 dark:text-slate-500">→</td>
                   <td className="py-2.5 px-1 text-slate-500 dark:text-slate-400">{m.target}</td>
                   <td className="py-2.5 px-1 text-right">
                     {m.status === "synced" ? (
@@ -949,7 +949,14 @@ export default function DashboardPage() {
         </nav>
 
         {/* User footer */}
-        <div className="p-3 border-t border-slate-100 dark:border-slate-800">
+        <div className="p-3 border-t border-slate-100 dark:border-slate-800 space-y-1">
+          <Link
+            href="/onboarding"
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+          >
+            <Sparkles size={14} className="text-amber-400" />
+            Workspace setup
+          </Link>
           <div className="flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer">
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
               JD
@@ -1290,7 +1297,7 @@ export default function DashboardPage() {
                     "flex items-center gap-4 p-4 rounded-2xl border shadow-sm bg-white dark:bg-slate-900 transition-all",
                     scheduleActive[s.id] ? "border-slate-200 dark:border-slate-700/60" : "opacity-60 border-slate-100 dark:border-slate-800"
                   )}>
-                    <Calendar size={16} className={scheduleActive[s.id] ? "text-amber-500 shrink-0" : "text-slate-300 dark:text-slate-600 shrink-0"} />
+                    <Calendar size={16} className={scheduleActive[s.id] ? "text-amber-500 shrink-0" : "text-slate-300 dark:text-slate-500 shrink-0"} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{s.name}</p>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{s.scope} · {s.time}</p>
@@ -1303,7 +1310,7 @@ export default function DashboardPage() {
                     )}>{s.mode}</span>
                     <button
                       onClick={() => setScheduleActive(prev => ({ ...prev, [s.id]: !prev[s.id] }))}
-                      className={cn("shrink-0 transition-colors", scheduleActive[s.id] ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}
+                      className={cn("shrink-0 transition-colors", scheduleActive[s.id] ? "text-amber-500" : "text-slate-300 dark:text-slate-500")}
                     >
                       {scheduleActive[s.id] ? <ToggleRight size={26} /> : <ToggleLeft size={26} />}
                     </button>
