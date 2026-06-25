@@ -4,10 +4,12 @@ import { useState, useRef, useEffect } from "react";
 import {
   Building2, Layers, Sun, SunDim, PowerOff, Bell, BellRing,
   TrendingDown, ChevronRight, ChevronDown, AlertTriangle, Info, AlertCircle,
+  CalendarDays,
 } from "lucide-react";
 import { buildings, alerts, energyData } from "@/lib/mockData";
 import type { Building, Floor, Zone } from "@/lib/mockData";
 import { cn, formatWatts } from "@/lib/utils";
+import WeeklyStandup from "@/components/WeeklyStandup";
 
 type ZoneState = Record<string, { isOn: boolean; brightness: number }>;
 
@@ -26,6 +28,7 @@ export default function ConsolePreview() {
   const [zones, setZones] = useState<ZoneState>(buildInitialState);
   const [expandedBuilding, setExpandedBuilding] = useState<string>(buildings[0].id);
   const [selectedZone, setSelectedZone] = useState<Zone | null>(null);
+  const [showStandup, setShowStandup] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Draw mini energy chart on canvas
@@ -280,6 +283,18 @@ export default function ConsolePreview() {
                 </div>
               </div>
 
+              {/* Weekly Standup button */}
+              <div className="mx-3 mb-2">
+                <button
+                  onClick={() => setShowStandup(true)}
+                  className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-white text-[10px] font-semibold transition-colors"
+                  aria-label="View weekly standup report"
+                >
+                  <CalendarDays size={11} />
+                  Weekly Standup
+                </button>
+              </div>
+
               {/* Alerts */}
               <div className="px-3 pt-1 pb-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
                 <BellRing size={10} /> Alerts
@@ -309,6 +324,8 @@ export default function ConsolePreview() {
           ✦ Interactions update local React state only — no API calls are made
         </p>
       </div>
+
+      {showStandup && <WeeklyStandup onClose={() => setShowStandup(false)} />}
     </section>
   );
 }
