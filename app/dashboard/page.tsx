@@ -582,6 +582,235 @@ function SettingsPanel({
   );
 }
 
+// ─── Intercom Integration Panel ──────────────────────────────────────────────
+
+const INTERCOM_MAPPINGS = [
+  { source: "Alert Title",          target: "Conversation Subject",   status: "synced"  },
+  { source: "Building Name",        target: "Custom Attribute",       status: "synced"  },
+  { source: "Zone ID",              target: "Conversation Tag",       status: "synced"  },
+  { source: "Alert Severity",       target: "Priority",               status: "synced"  },
+  { source: "Assignee Email",       target: "Assignee",               status: "pending" },
+  { source: "Resolution Notes",     target: "Closing Note",           status: "pending" },
+];
+
+const INTERCOM_LOG = [
+  { ts: "Today 11:30",  event: "Alert → Conversation synced",      count: "7 alerts",   ok: true  },
+  { ts: "Today 09:15",  event: "Contact attributes updated",        count: "23 records", ok: true  },
+  { ts: "Yesterday",    event: "OAuth token refreshed",             count: "",           ok: true  },
+  { ts: "May 18",       event: "Conversation sync – rate limited",  count: "1 retry",    ok: false },
+];
+
+function IntercomIntegrationCard() {
+  const [connected, setConnected]   = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [expanded, setExpanded]     = useState(false);
+  const [syncAlerts, setSyncAlerts] = useState(true);
+  const [syncClose, setSyncClose]   = useState(false);
+  const [syncing, setSyncing]       = useState(false);
+  const [syncToast, setSyncToast]   = useState(false);
+
+  function handleConnect() {
+    setConnecting(true);
+    setTimeout(() => { setConnecting(false); setConnected(true); setExpanded(true); }, 1800);
+  }
+
+  function handleSync() {
+    setSyncing(true);
+    setTimeout(() => { setSyncing(false); setSyncToast(true); setTimeout(() => setSyncToast(false), 2500); }, 2000);
+  }
+
+  return (
+    <>
+      {/* ── Connection Card ── */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: "#286efa" }}>
+            <svg viewBox="0 0 28 28" className="w-5 h-5 fill-white" xmlns="http://www.w3.org/2000/svg">
+              <path d="M14 2C7.373 2 2 7.373 2 14c0 2.572.82 4.953 2.21 6.9L2.5 25.5l4.9-1.55A11.94 11.94 0 0 0 14 26c6.627 0 12-5.373 12-12S20.627 2 14 2Zm-5.5 8.5a1 1 0 1 1 2 0v5a1 1 0 1 1-2 0v-5Zm4.5 0a1 1 0 1 1 2 0v5a1 1 0 1 1-2 0v-5Zm4.5 0a1 1 0 1 1 2 0v5a1 1 0 1 1-2 0v-5Z"/>
+            </svg>
+          </div>
+          <div className="flex-1">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Intercom</h3>
+            <p className="text-xs text-slate-400 dark:text-slate-500">Route alerts to customer conversations</p>
+          </div>
+          {connected ? (
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1.5 text-[11px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2.5 py-1 rounded-full">
+                <CheckCircle2 size={11} /> Connected
+              </span>
+              <button onClick={() => setExpanded(e => !e)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </button>
+            </div>
+          ) : (
+            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full">
+              <AlertCircle size={11} /> Not connected
+            </span>
+          )}
+        </div>
+
+        {!connected ? (
+          <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 p-4">
+            <p className="text-xs text-slate-600 dark:text-slate-300 mb-3">
+              Connect your Intercom workspace to automatically create and route conversations
+              when LumiGlow alerts fire. Uses OAuth 2.0 for secure workspace-level access.
+            </p>
+            <ul className="space-y-1.5 mb-4">
+              {["Create conversations from alerts", "Tag by building & severity", "Auto-assign to facilities team"].map(s => (
+                <li key={s} className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                  <CheckCircle2 size={12} className="text-green-500 shrink-0" />
+                  {s}
+                </li>
+              ))}
+            </ul>
+            <button
+              onClick={handleConnect}
+              disabled={connecting}
+              className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition-all disabled:opacity-70"
+              style={{ background: connecting ? "#94a3b8" : "#286efa" }}
+            >
+              {connecting ? <><RefreshCw size={14} className="animate-spin" /> Connecting…</> : <><Link2 size={14} /> Connect Intercom</>}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="rounded-xl border border-blue-100 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/5 p-4 flex items-center gap-3">
+              <Globe size={15} className="text-blue-500 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">acme.intercom.io</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">OAuth token active · Expires in 89 days</p>
+              </div>
+              <button
+                onClick={() => { setConnected(false); setExpanded(false); }}
+                className="text-[11px] text-red-500 hover:text-red-400 font-medium shrink-0"
+              >
+                Disconnect
+              </button>
+            </div>
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-60"
+            >
+              <RefreshCw size={13} className={syncing ? "animate-spin" : ""} />
+              {syncing ? "Syncing…" : "Sync now"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ── Expanded config (shown when connected) ── */}
+      {connected && expanded && (
+        <>
+          {/* Sync settings */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+            <div className="flex items-center gap-2 mb-5">
+              <ArrowLeftRight size={15} className="text-blue-500" />
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Intercom sync settings</h3>
+            </div>
+            {[
+              { label: "Alerts → Conversations", sub: "Open a conversation in Intercom when a critical alert fires",    val: syncAlerts, set: setSyncAlerts },
+              { label: "Auto-close on resolve",  sub: "Close the Intercom conversation when the alert is dismissed",   val: syncClose,  set: setSyncClose  },
+            ].map(row => (
+              <div key={row.label} className="flex items-center justify-between py-3.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
+                <div>
+                  <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{row.label}</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">{row.sub}</p>
+                </div>
+                <button
+                  onClick={() => row.set(!row.val)}
+                  className={cn("transition-colors shrink-0 ml-4", row.val ? "text-blue-500" : "text-slate-300 dark:text-slate-600")}
+                >
+                  {row.val ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+                </button>
+              </div>
+            ))}
+            <div className="pt-4">
+              <label className="text-sm text-slate-800 dark:text-slate-200 font-medium block mb-1.5">Assign to inbox</label>
+              <select className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-400">
+                <option>Facilities Team</option>
+                <option>Ops Alerts</option>
+                <option>Unassigned</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Field mapping */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+            <div className="flex items-center gap-2 mb-5">
+              <Database size={15} className="text-blue-500" />
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Field mapping</h3>
+              <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500">Read-only</span>
+            </div>
+            <div className="overflow-x-auto -mx-1">
+              <table className="w-full text-xs min-w-[400px]">
+                <thead>
+                  <tr className="border-b border-slate-100 dark:border-slate-800">
+                    <th className="text-left font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">LumiGlow field</th>
+                    <th className="text-center font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1 w-8">→</th>
+                    <th className="text-left font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Intercom field</th>
+                    <th className="text-right font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {INTERCOM_MAPPINGS.map((m, i) => (
+                    <tr key={i} className="border-b border-slate-50 dark:border-slate-800/60 last:border-0">
+                      <td className="py-2.5 px-1 text-slate-700 dark:text-slate-300 font-medium">{m.source}</td>
+                      <td className="py-2.5 px-1 text-center text-slate-300 dark:text-slate-600">→</td>
+                      <td className="py-2.5 px-1 text-slate-500 dark:text-slate-400">{m.target}</td>
+                      <td className="py-2.5 px-1 text-right">
+                        {m.status === "synced" ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-1.5 py-0.5 rounded-full">
+                            <CheckCircle2 size={9} /> synced
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/15 px-1.5 py-0.5 rounded-full">
+                            <Clock size={9} /> pending
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Activity log */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+              <Clock size={15} className="text-blue-500" />
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Recent activity</h3>
+            </div>
+            <div className="space-y-2">
+              {INTERCOM_LOG.map((l, i) => (
+                <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                  {l.ok
+                    ? <CheckCircle2 size={13} className="text-green-500 shrink-0" />
+                    : <AlertCircle size={13} className="text-red-500 shrink-0" />
+                  }
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{l.event}</p>
+                    {l.count && <p className="text-[11px] text-slate-400 mt-0.5">{l.count}</p>}
+                  </div>
+                  <p className="text-[11px] text-slate-400 shrink-0">{l.ts}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {syncToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-slate-900 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-xl">
+          <CheckCircle2 size={15} className="text-green-400 shrink-0" />
+          Intercom sync triggered!
+        </div>
+      )}
+    </>
+  );
+}
+
 // ─── HubSpot Integration Panel ───────────────────────────────────────────────
 
 const FIELD_MAPPINGS = [
@@ -623,7 +852,26 @@ function IntegrationsPanel() {
   return (
     <div className="max-w-2xl space-y-6">
 
-      {/* ── Connection Card ── */}
+      {/* ── Section header ── */}
+      <div>
+        <h2 className="text-base font-bold text-slate-900 dark:text-white">Integrations</h2>
+        <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Connect LumiGlow to your external tools and services.</p>
+      </div>
+
+      {/* ── Customer Support ── */}
+      <div>
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Customer Support</p>
+        <div className="space-y-4">
+          <IntercomIntegrationCard />
+        </div>
+      </div>
+
+      {/* ── CRM ── */}
+      <div>
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">CRM</p>
+      </div>
+
+      {/* ── HubSpot Connection Card ── */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
         <div className="flex items-center gap-3 mb-5">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: "#ff7a59" }}>
