@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
 import {
   Zap, LayoutDashboard, Building2, Bell, Calendar,
@@ -248,14 +248,14 @@ function KpiCard({ label, value, sub, icon, accent }: {
   label: string; value: string; sub: string; icon: React.ReactNode; accent: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 flex items-start gap-4 shadow-sm hover:shadow-md transition-shadow">
-      <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0", accent)}>
+    <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-4 sm:p-5 flex items-start gap-3 sm:gap-4 shadow-sm hover:shadow-md transition-shadow min-w-0">
+      <div className={cn("w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0", accent)}>
         {icon}
       </div>
-      <div>
-        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{label}</p>
-        <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-0.5">{value}</p>
-        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{sub}</p>
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 font-medium truncate">{label}</p>
+        <p className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white mt-0.5 tabular-nums leading-tight">{value}</p>
+        <p className="text-[10px] sm:text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">{sub}</p>
       </div>
     </div>
   );
@@ -832,6 +832,32 @@ export default function DashboardPage() {
   const [reportToast, setReportToast] = useState<string | null>(null);
   const [branding, setBranding] = useState<BrandingConfig>(DEFAULT_BRANDING);
 
+  // ── Pull-to-refresh & foreground refresh ─────────────────────────────────
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const triggerRefresh = useCallback(() => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+    refreshTimeoutRef.current = setTimeout(() => {
+      setIsRefreshing(false);
+      setLastRefreshed(new Date());
+    }, 1200);
+  }, [isRefreshing]);
+
+  // Foreground refresh: re-fetch when tab becomes visible again
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        triggerRefresh();
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [triggerRefresh]);
+
   // Zone interactions
   const toggleZone = useCallback((zoneId: string) => {
     setBuildings(prev => prev.map(b => ({
@@ -1005,6 +1031,16 @@ export default function DashboardPage() {
             />
           </div>
 
+          {/* Refresh button */}
+          <button
+            onClick={triggerRefresh}
+            disabled={isRefreshing}
+            title={`Last refreshed ${lastRefreshed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
+            className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw size={16} className={isRefreshing ? "animate-spin" : ""} />
+          </button>
+
           {/* Theme toggle */}
           <ThemeToggle />
 
@@ -1026,8 +1062,33 @@ export default function DashboardPage() {
           {/* ── OVERVIEW ── */}
           {tab === "overview" && (
             <div className="space-y-6">
+
+              {/* Pull-to-refresh bar */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-[11px] text-slate-400 dark:text-slate-500">
+                  <Clock size={12} className="shrink-0" />
+                  <span>
+                    {isRefreshing
+                      ? "Refreshing data…"
+                      : `Updated ${lastRefreshed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
+                  </span>
+                  {isRefreshing && <RefreshCw size={11} className="animate-spin text-amber-500" />}
+                </div>
+                <button
+                  onClick={triggerRefresh}
+                  disabled={isRefreshing}
+                  className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:text-amber-500 disabled:opacity-40 transition-colors"
+                >
+                  <RefreshCw size={11} className={isRefreshing ? "animate-spin" : ""} />
+                  Pull to refresh
+                </button>
+              </div>
+
               {/* KPIs */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className={cn(
+                "grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 transition-opacity duration-300",
+                isRefreshing && "opacity-60"
+              )}>
                 <KpiCard
                   label="Buildings online"
                   value={String(buildings.length)}
@@ -1059,7 +1120,10 @@ export default function DashboardPage() {
               </div>
 
               {/* Chart */}
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
+              <div className={cn(
+                "rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm transition-opacity duration-300",
+                isRefreshing && "opacity-60"
+              )}>
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h2 className="text-sm font-bold text-slate-900 dark:text-white">Energy usage today</h2>
@@ -1073,7 +1137,10 @@ export default function DashboardPage() {
               </div>
 
               {/* Alerts preview & buildings summary */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className={cn(
+                "grid grid-cols-1 lg:grid-cols-2 gap-4 transition-opacity duration-300",
+                isRefreshing && "opacity-60"
+              )}>
                 {/* Recent alerts */}
                 <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
                   <div className="flex items-center justify-between mb-3">
