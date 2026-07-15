@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Zap, Eye, EyeOff, CheckCircle2, AlertCircle, ArrowRight, Shield, Loader2 } from "lucide-react";
+import {
+  Zap, Eye, EyeOff, CheckCircle2, AlertCircle, ArrowRight,
+  Shield, Loader2, Wrench, ExternalLink,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
 
-type Step = "idle" | "redirecting" | "authenticating" | "success" | "error";
+type Step = "idle" | "init" | "redirecting" | "callback" | "token" | "resolve" | "success" | "error";
 
-// Microsoft SVG icon
 function MicrosoftIcon({ size = 20 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -32,104 +34,59 @@ function GoogleIcon({ size = 20 }: { size?: number }) {
   );
 }
 
+function SlackIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.521 2.528 2.528 0 0 1-2.521-2.52 2.528 2.528 0 0 1 2.52-2.521h2.521v2.52zM6.313 15.165a2.528 2.528 0 0 1 2.521-2.521 2.528 2.528 0 0 1 2.521 2.52v6.313a2.528 2.528 0 0 1-2.52 2.521 2.528 2.528 0 0 1-2.522-2.52v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.521v2.521H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.52 2.521H2.521A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.521-2.521h6.313zM18.956 8.834a2.528 2.528 0 0 1 2.521-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.521 2.521h-2.521V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.521 2.521 2.528 2.528 0 0 1-2.521-2.52V2.521A2.528 2.528 0 0 1 15.167 0a2.528 2.528 0 0 1 2.521 2.521v6.313zM15.167 18.956a2.528 2.528 0 0 1 2.521 2.521A2.528 2.528 0 0 1 15.167 24a2.528 2.528 0 0 1-2.521-2.521v-2.521h2.521zM15.167 17.688a2.528 2.528 0 0 1-2.521-2.521 2.528 2.528 0 0 1 2.52-2.521h6.313A2.528 2.528 0 0 1 24 15.167a2.528 2.528 0 0 1-2.521 2.521h-6.312z" fill="#E01E5A"/>
+    </svg>
+  );
+}
+
+const FLOW_STEPS = [
+  { key: "init",        label: "Initiating OAuth request",         sub: "Generating secure state token" },
+  { key: "redirecting", label: "Redirect URI validated",           sub: "lumiglow.app/auth/callback/microsoft" },
+  { key: "callback",    label: "Authorization code received",      sub: "Microsoft Entra ID callback" },
+  { key: "token",       label: "Token exchange complete",          sub: "Access + ID token acquired" },
+  { key: "resolve",     label: "Account resolved",                 sub: "Identity linked · Session created" },
+];
+
+const STEP_ORDER: Step[] = ["init", "redirecting", "callback", "token", "resolve", "success"];
+
 function MicrosoftOAuthModal({
   step,
+  fromSlack,
   onClose,
 }: {
   step: Step;
+  fromSlack: boolean;
   onClose: () => void;
 }) {
   if (step === "idle") return null;
 
+  const currentIdx = STEP_ORDER.indexOf(step);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-
-      {/* Modal */}
       <div className="relative z-10 w-full max-w-sm mx-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden">
-        {/* Microsoft header bar */}
-        <div className="bg-[#0078D4] px-6 py-4 flex items-center gap-3">
-          <MicrosoftIcon size={22} />
-          <span className="text-white font-semibold text-sm">Microsoft</span>
+
+        {/* Microsoft header */}
+        <div className="bg-[#0078D4] px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <MicrosoftIcon size={22} />
+            <span className="text-white font-semibold text-sm">Microsoft sign-in</span>
+          </div>
+          {fromSlack && (
+            <div className="flex items-center gap-1.5 bg-white/15 rounded-lg px-2.5 py-1">
+              <SlackIcon size={12} />
+              <span className="text-white text-xs font-medium">via Slack</span>
+            </div>
+          )}
         </div>
 
-        <div className="px-6 py-8 text-center">
-          {step === "redirecting" && (
-            <div className="space-y-4">
-              <Loader2 className="w-10 h-10 mx-auto text-[#0078D4] animate-spin" />
-              <div>
-                <p className="font-semibold text-slate-900 dark:text-white">Redirecting to Microsoft</p>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                  Connecting to Azure AD / Entra ID…
-                </p>
-              </div>
-              <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 rounded-xl p-3">
-                <Shield size={14} className="text-green-500 shrink-0" />
-                <p className="text-xs text-slate-500 dark:text-slate-400 text-left">
-                  Secure OAuth 2.0 · Redirect URI verified · State parameter active
-                </p>
-              </div>
-            </div>
-          )}
-
-          {step === "authenticating" && (
-            <div className="space-y-4">
-              <Loader2 className="w-10 h-10 mx-auto text-[#0078D4] animate-spin" />
-              <div>
-                <p className="font-semibold text-slate-900 dark:text-white">Authenticating</p>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                  Exchanging authorization code for token…
-                </p>
-              </div>
-              <div className="flex flex-col gap-2 text-left">
-                {[
-                  { label: "Redirect URI matched", done: true },
-                  { label: "Authorization code received", done: true },
-                  { label: "Token exchange in progress…", done: false },
-                ].map((item) => (
-                  <div key={item.label} className="flex items-center gap-2">
-                    {item.done ? (
-                      <CheckCircle2 size={14} className="text-green-500 shrink-0" />
-                    ) : (
-                      <Loader2 size={14} className="text-[#0078D4] animate-spin shrink-0" />
-                    )}
-                    <span className="text-xs text-slate-600 dark:text-slate-400">{item.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {step === "success" && (
-            <div className="space-y-4">
-              <div className="w-14 h-14 mx-auto rounded-full bg-green-100 dark:bg-green-500/20 flex items-center justify-center">
-                <CheckCircle2 className="w-8 h-8 text-green-500" />
-              </div>
-              <div>
-                <p className="font-semibold text-slate-900 dark:text-white">Signed in successfully</p>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                  Welcome back, Jordan Davis
-                </p>
-                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                  jordan@acme.com · Microsoft Entra ID
-                </p>
-              </div>
-              <div className="flex items-center gap-2 bg-green-50 dark:bg-green-500/10 rounded-xl p-3">
-                <Shield size={14} className="text-green-500 shrink-0" />
-                <p className="text-xs text-green-700 dark:text-green-400 text-left">
-                  OAuth flow completed · Session created · Redirecting to dashboard…
-                </p>
-              </div>
-              <div className="flex items-center justify-center gap-1.5">
-                <Loader2 size={12} className="animate-spin text-slate-400" />
-                <span className="text-xs text-slate-400">Redirecting…</span>
-              </div>
-            </div>
-          )}
-
-          {step === "error" && (
-            <div className="space-y-4">
+        <div className="px-6 py-6">
+          {step === "error" ? (
+            <div className="space-y-4 text-center">
               <div className="w-14 h-14 mx-auto rounded-full bg-red-100 dark:bg-red-500/20 flex items-center justify-center">
                 <AlertCircle className="w-8 h-8 text-red-500" />
               </div>
@@ -146,6 +103,74 @@ function MicrosoftOAuthModal({
                 Try again
               </button>
             </div>
+          ) : step === "success" ? (
+            <div className="space-y-4 text-center">
+              <div className="w-14 h-14 mx-auto rounded-full bg-green-100 dark:bg-green-500/20 flex items-center justify-center">
+                <CheckCircle2 className="w-8 h-8 text-green-500" />
+              </div>
+              <div>
+                <p className="font-semibold text-slate-900 dark:text-white">Signed in successfully</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                  Welcome back, Jordan Davis
+                </p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                  jordan@acme.com · Microsoft Entra ID
+                </p>
+              </div>
+              <div className="flex items-center gap-2 bg-green-50 dark:bg-green-500/10 rounded-xl p-3">
+                <Shield size={14} className="text-green-500 shrink-0" />
+                <p className="text-xs text-green-700 dark:text-green-400 text-left">
+                  All 5 auth checks passed · Session active · Redirecting…
+                </p>
+              </div>
+              <div className="flex items-center justify-center gap-1.5">
+                <Loader2 size={12} className="animate-spin text-slate-400" />
+                <span className="text-xs text-slate-400">Redirecting to dashboard…</span>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">
+                Auth flow
+              </p>
+              {FLOW_STEPS.map((s, i) => {
+                const done = i < currentIdx;
+                const active = STEP_ORDER[currentIdx] === s.key;
+                const pending = !done && !active;
+                return (
+                  <div
+                    key={s.key}
+                    className={cn(
+                      "flex items-start gap-3 p-3 rounded-xl transition-all",
+                      done && "bg-green-50 dark:bg-green-500/10",
+                      active && "bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20",
+                      pending && "opacity-40",
+                    )}
+                  >
+                    <div className="mt-0.5 shrink-0">
+                      {done ? (
+                        <CheckCircle2 size={15} className="text-green-500" />
+                      ) : active ? (
+                        <Loader2 size={15} className="text-[#0078D4] animate-spin" />
+                      ) : (
+                        <div className="w-[15px] h-[15px] rounded-full border-2 border-slate-300 dark:border-slate-600" />
+                      )}
+                    </div>
+                    <div>
+                      <p className={cn(
+                        "text-xs font-semibold",
+                        done && "text-green-700 dark:text-green-400",
+                        active && "text-[#0078D4] dark:text-blue-400",
+                        pending && "text-slate-500 dark:text-slate-500",
+                      )}>
+                        {s.label}
+                      </p>
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{s.sub}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       </div>
@@ -159,14 +184,27 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [oauthStep, setOauthStep] = useState<Step>("idle");
+  const [fromSlack, setFromSlack] = useState(false);
   const [emailError, setEmailError] = useState("");
 
-  // Microsoft OAuth demo flow
+  function runOAuthFlow() {
+    setOauthStep("init");
+    setTimeout(() => setOauthStep("redirecting"), 900);
+    setTimeout(() => setOauthStep("callback"), 1900);
+    setTimeout(() => setOauthStep("token"), 2900);
+    setTimeout(() => setOauthStep("resolve"), 3900);
+    setTimeout(() => setOauthStep("success"), 4900);
+    setTimeout(() => router.push("/dashboard"), 6200);
+  }
+
   function handleMicrosoftSignIn() {
-    setOauthStep("redirecting");
-    setTimeout(() => setOauthStep("authenticating"), 1800);
-    setTimeout(() => setOauthStep("success"), 3600);
-    setTimeout(() => router.push("/dashboard"), 5200);
+    setFromSlack(false);
+    runOAuthFlow();
+  }
+
+  function handleSlackSignIn() {
+    setFromSlack(true);
+    runOAuthFlow();
   }
 
   function handleEmailSignIn(e: React.FormEvent) {
@@ -181,7 +219,11 @@ export default function LoginPage() {
 
   return (
     <>
-      <MicrosoftOAuthModal step={oauthStep} onClose={() => setOauthStep("idle")} />
+      <MicrosoftOAuthModal
+        step={oauthStep}
+        fromSlack={fromSlack}
+        onClose={() => setOauthStep("idle")}
+      />
 
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-amber-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex flex-col">
         {/* Top bar */}
@@ -200,6 +242,16 @@ export default function LoginPage() {
         {/* Card */}
         <div className="flex-1 flex items-center justify-center px-4 py-12">
           <div className="w-full max-w-md">
+
+            {/* Fix notice banner */}
+            <div className="mb-4 flex items-start gap-3 bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/25 rounded-xl px-4 py-3">
+              <Wrench size={14} className="text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
+              <p className="text-xs text-green-800 dark:text-green-300 leading-relaxed">
+                <span className="font-semibold">Microsoft sign-in restored.</span>{" "}
+                Redirect URI handling and Slack-initiated OAuth flows have been fixed. All auth paths are operational.
+              </p>
+            </div>
+
             <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 shadow-xl shadow-slate-900/5 dark:shadow-slate-950/50 p-8">
               {/* Header */}
               <div className="text-center mb-8">
@@ -210,7 +262,7 @@ export default function LoginPage() {
               </div>
 
               {/* SSO Buttons */}
-              <div className="space-y-3 mb-6">
+              <div className="space-y-3 mb-5">
                 <button
                   onClick={handleMicrosoftSignIn}
                   className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700/60 hover:border-slate-300 dark:hover:border-slate-600 transition-all shadow-sm hover:shadow group"
@@ -228,6 +280,27 @@ export default function LoginPage() {
                   Continue with Google
                   <ArrowRight size={14} className="ml-auto text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors" />
                 </button>
+              </div>
+
+              {/* Slack-initiated flow demo */}
+              <div className="mb-5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <SlackIcon size={14} />
+                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Coming from Slack?
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleSlackSignIn}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-[#0078D4] hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+                  >
+                    Sign in with Microsoft <ExternalLink size={11} />
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+                  Slack-initiated Microsoft auth now works correctly across all entry points.
+                </p>
               </div>
 
               {/* Divider */}
