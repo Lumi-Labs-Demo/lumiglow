@@ -10,6 +10,7 @@ import {
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
   Palette, Upload, Eye, Plug, RefreshCw, ArrowLeftRight,
   Database, Globe, Link2, AlertCircle, Clock,
+  Key, Copy, Lock, UserCheck, UserX, Shield, ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -569,6 +570,12 @@ function SettingsPanel({
         </button>
       </div>
 
+      {/* ── SSO Configuration ── */}
+      <SsoPanel />
+
+      {/* ── SCIM Provisioning ── */}
+      <ScimPanel />
+
       <button
         onClick={save}
         className={cn(
@@ -578,6 +585,352 @@ function SettingsPanel({
       >
         {saved ? <><CheckCircle2 size={15} /> Saved!</> : "Save changes"}
       </button>
+    </div>
+  );
+}
+
+// ─── SSO Panel ────────────────────────────────────────────────────────────────
+
+function SsoPanel() {
+  const [ssoEnabled, setSsoEnabled] = useState(false);
+  const [ssoMode, setSsoMode] = useState<"optional" | "required">("optional");
+  const [idpName, setIdpName] = useState("Okta");
+  const [entityId, setEntityId] = useState("https://acme.okta.com/app/lumiglow/sso/saml/metadata");
+  const [acsUrl]   = useState("https://app.lumiglow.io/auth/saml/acs");
+  const [ssoUrl, setSsoUrl] = useState("https://acme.okta.com/app/lumiglow/sso/saml");
+  const [certExpiry] = useState("2026-09-14");
+  const [copiedAcs, setCopiedAcs] = useState(false);
+  const [testStatus, setTestStatus] = useState<"idle"|"testing"|"ok"|"fail">("idle");
+  const [saved, setSaved] = useState(false);
+
+  function copyAcs() {
+    navigator.clipboard?.writeText(acsUrl).catch(() => {});
+    setCopiedAcs(true);
+    setTimeout(() => setCopiedAcs(false), 2000);
+  }
+
+  function testConnection() {
+    setTestStatus("testing");
+    setTimeout(() => { setTestStatus("ok"); setTimeout(() => setTestStatus("idle"), 3000); }, 1800);
+  }
+
+  function saveSSO() {
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+      <div className="flex items-center gap-2 mb-5">
+        <Shield size={16} className="text-indigo-500" />
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Single Sign-On (SSO)</h3>
+        <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300">Enterprise</span>
+      </div>
+
+      <div className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800 mb-5">
+        <div>
+          <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">Enable SAML 2.0 SSO</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500">Allow users to authenticate via your identity provider</p>
+        </div>
+        <button onClick={() => setSsoEnabled(!ssoEnabled)} className={cn("transition-colors", ssoEnabled ? "text-indigo-500" : "text-slate-300 dark:text-slate-600")}>
+          {ssoEnabled ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+        </button>
+      </div>
+
+      {ssoEnabled && (
+        <div className="space-y-5">
+          <div>
+            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 block">SSO enforcement</label>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { value: "optional", label: "Optional", desc: "Users can log in with password or SSO", icon: <Users size={14} /> },
+                { value: "required", label: "Required", desc: "All users must authenticate via SSO", icon: <Lock size={14} /> },
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setSsoMode(opt.value as "optional" | "required")}
+                  className={cn(
+                    "text-left rounded-xl border p-3.5 transition-all",
+                    ssoMode === opt.value
+                      ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10"
+                      : "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
+                  )}
+                >
+                  <div className={cn("flex items-center gap-2 mb-1 font-semibold text-sm", ssoMode === opt.value ? "text-indigo-600 dark:text-indigo-400" : "text-slate-700 dark:text-slate-300")}>
+                    {opt.icon} {opt.label}
+                    {ssoMode === opt.value && <CheckCircle2 size={13} className="ml-auto text-indigo-500" />}
+                  </div>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-snug">{opt.desc}</p>
+                </button>
+              ))}
+            </div>
+            {ssoMode === "required" && (
+              <div className="mt-3 flex items-start gap-2 text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-lg px-3 py-2.5">
+                <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                <span>Break-glass admin access remains available via a time-bound bypass link for account recovery.</span>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 block">Identity provider</label>
+            <div className="flex gap-2 mb-4 flex-wrap">
+              {["Okta", "Azure AD", "Google", "Custom"].map(p => (
+                <button
+                  key={p}
+                  onClick={() => setIdpName(p)}
+                  className={cn(
+                    "px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all",
+                    idpName === p
+                      ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300"
+                      : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300"
+                  )}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">IdP Entity ID / Issuer</label>
+                <input value={entityId} onChange={e => setEntityId(e.target.value)}
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 font-mono" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">IdP SSO URL</label>
+                <input value={ssoUrl} onChange={e => setSsoUrl(e.target.value)}
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 font-mono" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">SP ACS URL (copy into your IdP)</label>
+                <div className="flex gap-2">
+                  <input readOnly value={acsUrl}
+                    className="flex-1 px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 font-mono cursor-default" />
+                  <button onClick={copyAcs}
+                    className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                    {copiedAcs ? <CheckCircle2 size={14} className="text-green-500" /> : <Copy size={14} />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">X.509 Certificate expiry</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">{certExpiry}</span>
+                  <span className="text-[11px] text-green-600 dark:text-green-400 font-medium flex items-center gap-1"><CheckCircle2 size={11} /> Valid</span>
+                  <button className="ml-auto text-xs text-indigo-500 hover:text-indigo-400 font-semibold">Rotate certificate →</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 pt-1 flex-wrap">
+            <button onClick={testConnection} disabled={testStatus === "testing"}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50">
+              {testStatus === "testing" ? <RefreshCw size={14} className="animate-spin" /> : <ExternalLink size={14} />}
+              {testStatus === "testing" ? "Testing…" : testStatus === "ok" ? "✓ Connection verified" : "Test SSO connection"}
+            </button>
+            <button onClick={saveSSO}
+              className={cn("flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl transition-all text-white shadow",
+                saved ? "bg-green-500" : "bg-indigo-500 hover:bg-indigo-400")}>
+              {saved ? <><CheckCircle2 size={14} /> Saved!</> : <><Shield size={14} /> Save SSO settings</>}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── SCIM Panel ───────────────────────────────────────────────────────────────
+
+const SCIM_USERS = [
+  { name: "Alex Chen",       email: "alex.chen@acme.com",    role: "Admin",  scimManaged: true,  active: true  },
+  { name: "Morgan Lee",      email: "morgan.lee@acme.com",   role: "Member", scimManaged: true,  active: true  },
+  { name: "Jordan Davis",    email: "jordan@acme.com",       role: "Admin",  scimManaged: false, active: true  },
+  { name: "Taylor Rivera",   email: "taylor@acme.com",       role: "Member", scimManaged: true,  active: false },
+  { name: "Casey Williams",  email: "casey@acme.com",        role: "Member", scimManaged: false, active: true  },
+];
+
+const ROLE_MAPPINGS = [
+  { scimGroup: "LumiGlow Admins",  lumiRole: "Admin"  },
+  { scimGroup: "LumiGlow Members", lumiRole: "Member" },
+];
+
+function ScimPanel() {
+  const [scimEnabled, setScimEnabled] = useState(false);
+  const [tokenVisible, setTokenVisible] = useState(false);
+  const [tokenCopied, setTokenCopied] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const scimToken = "scim_tok_acme_xK9mP3nR7qT2vL8wJ5hD6yF4bN1sE0cA";
+  const scimEndpoint = "https://app.lumiglow.io/scim/v2";
+  const [endpointCopied, setEndpointCopied] = useState(false);
+
+  function copyToken() {
+    navigator.clipboard?.writeText(scimToken).catch(() => {});
+    setTokenCopied(true);
+    setTimeout(() => setTokenCopied(false), 2000);
+  }
+
+  function copyEndpoint() {
+    navigator.clipboard?.writeText(scimEndpoint).catch(() => {});
+    setEndpointCopied(true);
+    setTimeout(() => setEndpointCopied(false), 2000);
+  }
+
+  function regenerateToken() {
+    setRegenerating(true);
+    setTimeout(() => setRegenerating(false), 1500);
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+      <div className="flex items-center gap-2 mb-5">
+        <Key size={16} className="text-violet-500" />
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">SCIM 2.0 Provisioning</h3>
+        <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300">Enterprise</span>
+      </div>
+
+      <div className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800 mb-5">
+        <div>
+          <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">Enable SCIM provisioning</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500">Automate user provisioning and deprovisioning from your IdP</p>
+        </div>
+        <button onClick={() => setScimEnabled(!scimEnabled)} className={cn("transition-colors", scimEnabled ? "text-violet-500" : "text-slate-300 dark:text-slate-600")}>
+          {scimEnabled ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+        </button>
+      </div>
+
+      {scimEnabled && (
+        <div className="space-y-5">
+          <div>
+            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 block">Connection details</label>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">SCIM base URL</label>
+                <div className="flex gap-2">
+                  <input readOnly value={scimEndpoint}
+                    className="flex-1 px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 font-mono cursor-default" />
+                  <button onClick={copyEndpoint}
+                    className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                    {endpointCopied ? <CheckCircle2 size={14} className="text-green-500" /> : <Copy size={14} />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Bearer token</label>
+                <div className="flex gap-2">
+                  <input readOnly type={tokenVisible ? "text" : "password"} value={scimToken}
+                    className="flex-1 px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 font-mono cursor-default" />
+                  <button onClick={() => setTokenVisible(!tokenVisible)}
+                    className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                    <Eye size={14} />
+                  </button>
+                  <button onClick={copyToken}
+                    className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                    {tokenCopied ? <CheckCircle2 size={14} className="text-green-500" /> : <Copy size={14} />}
+                  </button>
+                  <button onClick={regenerateToken} title="Regenerate token"
+                    className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                    <RefreshCw size={14} className={regenerating ? "animate-spin" : ""} />
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">Regenerating the token will invalidate the existing token immediately.</p>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 block">Role mapping</label>
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-slate-800/50">
+                    <th className="text-left text-xs font-semibold text-slate-400 dark:text-slate-500 px-4 py-2.5">SCIM group</th>
+                    <th className="text-center text-xs font-semibold text-slate-400 dark:text-slate-500 px-4 py-2.5 w-8">→</th>
+                    <th className="text-left text-xs font-semibold text-slate-400 dark:text-slate-500 px-4 py-2.5">LumiGlow role</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {ROLE_MAPPINGS.map((r, i) => (
+                    <tr key={i}>
+                      <td className="px-4 py-2.5 font-mono text-xs text-slate-700 dark:text-slate-300">{r.scimGroup}</td>
+                      <td className="px-4 py-2.5 text-center text-slate-400">→</td>
+                      <td className="px-4 py-2.5">
+                        <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full",
+                          r.lumiRole === "Admin" ? "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400" : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400"
+                        )}>{r.lumiRole}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 block">Provisioned users</label>
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-slate-800/50">
+                    <th className="text-left text-xs font-semibold text-slate-400 dark:text-slate-500 px-4 py-2.5">User</th>
+                    <th className="text-left text-xs font-semibold text-slate-400 dark:text-slate-500 px-4 py-2.5 hidden sm:table-cell">Role</th>
+                    <th className="text-left text-xs font-semibold text-slate-400 dark:text-slate-500 px-4 py-2.5">Source</th>
+                    <th className="text-left text-xs font-semibold text-slate-400 dark:text-slate-500 px-4 py-2.5">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {SCIM_USERS.map((u, i) => (
+                    <tr key={i} className={cn(!u.active && "opacity-50")}>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0",
+                            u.active ? "bg-gradient-to-br from-amber-400 to-orange-500" : "bg-slate-300 dark:bg-slate-600")}>
+                            {u.name.split(" ").map(n => n[0]).join("")}
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{u.name}</p>
+                            <p className="text-[11px] text-slate-400 dark:text-slate-500">{u.email}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5 hidden sm:table-cell">
+                        <span className={cn("text-[11px] font-semibold px-2 py-0.5 rounded-full",
+                          u.role === "Admin" ? "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400" : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400"
+                        )}>{u.role}</span>
+                        {u.scimManaged && <span className="ml-1 text-[10px] text-violet-500 dark:text-violet-400 font-medium" title="Fields managed by SCIM">🔒</span>}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        {u.scimManaged ? (
+                          <span className="flex items-center gap-1 text-[11px] font-semibold text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-500/10 px-2 py-0.5 rounded-full w-fit">
+                            <Key size={10} /> SCIM
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full w-fit">
+                            <Users size={10} /> Manual
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        {u.active ? (
+                          <span className="flex items-center gap-1 text-[11px] font-semibold text-green-600 dark:text-green-400">
+                            <UserCheck size={12} /> Active
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-400 dark:text-slate-500">
+                            <UserX size={12} /> Deprovisioned
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2">SCIM-managed users have their role and active state controlled by the identity provider. In-app edits for those fields are locked.</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
