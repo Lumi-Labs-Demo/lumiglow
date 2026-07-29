@@ -10,6 +10,7 @@ import {
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
   Palette, Upload, Eye, Plug, RefreshCw, ArrowLeftRight,
   Database, Globe, Link2, AlertCircle, Clock,
+  GripVertical, Plus, LayoutGrid, Pencil,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -33,6 +34,31 @@ interface BrandingConfig {
   logoUrl: string;
   logoInitials: string;
 }
+
+type WidgetId = "kpi-buildings" | "kpi-zones" | "kpi-power" | "kpi-savings" | "energy-chart" | "recent-alerts" | "buildings-summary" | "quick-actions" | "schedule-status";
+
+interface WidgetDef {
+  id: WidgetId;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+  size: "sm" | "md" | "lg";
+}
+
+const WIDGET_CATALOG: WidgetDef[] = [
+  { id: "kpi-buildings",      label: "Buildings Online",    description: "Count of connected buildings",          icon: <Building2 size={15} />,    size: "sm" },
+  { id: "kpi-zones",          label: "Active Zones",        description: "Zones currently on vs. total",          icon: <Zap size={15} />,          size: "sm" },
+  { id: "kpi-power",          label: "Live Power Draw",     description: "Real-time kW and estimated kWh",        icon: <Activity size={15} />,     size: "sm" },
+  { id: "kpi-savings",        label: "Energy Savings",      description: "% savings vs. last-year baseline",      icon: <TrendingDown size={15} />, size: "sm" },
+  { id: "energy-chart",       label: "Energy Chart",        description: "Hourly kWh usage vs. baseline",         icon: <BarChart3 size={15} />,    size: "lg" },
+  { id: "recent-alerts",      label: "Recent Alerts",       description: "Latest critical and warning events",    icon: <Bell size={15} />,         size: "md" },
+  { id: "buildings-summary",  label: "Buildings Summary",   description: "Per-building zone and power overview",  icon: <Building2 size={15} />,    size: "md" },
+  { id: "quick-actions",      label: "Quick Actions",       description: "Common shortcuts and controls",         icon: <Zap size={15} />,          size: "md" },
+  { id: "schedule-status",    label: "Schedule Status",     description: "Active automation schedules at a glance", icon: <Calendar size={15} />,   size: "md" },
+];
+
+const DEFAULT_WIDGETS: WidgetId[] = ["kpi-buildings", "kpi-zones", "kpi-power", "kpi-savings", "energy-chart", "recent-alerts", "buildings-summary"];
+const MAX_WIDGETS = 8;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -832,6 +858,28 @@ export default function DashboardPage() {
   const [reportToast, setReportToast] = useState<string | null>(null);
   const [branding, setBranding] = useState<BrandingConfig>(DEFAULT_BRANDING);
 
+  // Personalized dashboard state
+  const [activeWidgets, setActiveWidgets] = useState<WidgetId[]>(DEFAULT_WIDGETS);
+  const [editingDashboard, setEditingDashboard] = useState(false);
+  const [catalogOpen, setCatalogOpen] = useState(false);
+
+  const addWidget = (id: WidgetId) => {
+    if (activeWidgets.length >= MAX_WIDGETS) return;
+    if (!activeWidgets.includes(id)) setActiveWidgets(prev => [...prev, id]);
+  };
+  const removeWidget = (id: WidgetId) => setActiveWidgets(prev => prev.filter(w => w !== id));
+  const moveWidget = (id: WidgetId, dir: -1 | 1) => {
+    setActiveWidgets(prev => {
+      const idx = prev.indexOf(id);
+      if (idx < 0) return prev;
+      const next = idx + dir;
+      if (next < 0 || next >= prev.length) return prev;
+      const arr = [...prev];
+      [arr[idx], arr[next]] = [arr[next], arr[idx]];
+      return arr;
+    });
+  };
+
   // Zone interactions
   const toggleZone = useCallback((zoneId: string) => {
     setBuildings(prev => prev.map(b => ({
@@ -1025,109 +1073,363 @@ export default function DashboardPage() {
 
           {/* ── OVERVIEW ── */}
           {tab === "overview" && (
-            <div className="space-y-6">
-              {/* KPIs */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <KpiCard
-                  label="Buildings online"
-                  value={String(buildings.length)}
-                  sub="All systems normal"
-                  icon={<Building2 size={18} className="text-sky-600 dark:text-sky-400" />}
-                  accent="bg-sky-100 dark:bg-sky-500/20"
-                />
-                <KpiCard
-                  label="Zones active"
-                  value={`${zonesOn(buildings)} / ${totalZones(buildings)}`}
-                  sub="Across all floors"
-                  icon={<Zap size={18} className="text-amber-600 dark:text-amber-400" />}
-                  accent="bg-amber-100 dark:bg-amber-500/20"
-                />
-                <KpiCard
-                  label="Live power draw"
-                  value={`${(watts / 1000).toFixed(1)} kW`}
-                  sub={`~${kwhEst} kWh est. today`}
-                  icon={<Activity size={18} className="text-violet-600 dark:text-violet-400" />}
-                  accent="bg-violet-100 dark:bg-violet-500/20"
-                />
-                <KpiCard
-                  label="Energy savings"
-                  value={`${savings}%`}
-                  sub="vs. last-year baseline"
-                  icon={<TrendingDown size={18} className="text-green-600 dark:text-green-400" />}
-                  accent="bg-green-100 dark:bg-green-500/20"
-                />
-              </div>
-
-              {/* Chart */}
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h2 className="text-sm font-bold text-slate-900 dark:text-white">Energy usage today</h2>
-                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">All buildings · kWh per hour</p>
-                  </div>
-                  <span className="text-xs font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2.5 py-1 rounded-full">
-                    ↓ {savings}% vs baseline
-                  </span>
+            <div className="space-y-4">
+              {/* ── Dashboard toolbar ── */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-white">My Dashboard</h2>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{activeWidgets.length} of {MAX_WIDGETS} widgets</p>
                 </div>
-                <EnergyChart />
-              </div>
-
-              {/* Alerts preview & buildings summary */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* Recent alerts */}
-                <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-sm font-bold text-slate-900 dark:text-white">Recent alerts</h2>
-                    <button onClick={() => setTab("alerts")} className="text-xs text-amber-500 hover:text-amber-400 font-semibold">
-                      View all →
+                <div className="hidden sm:flex items-center gap-2">
+                  {editingDashboard && (
+                    <button
+                      onClick={() => setCatalogOpen(true)}
+                      disabled={activeWidgets.length >= MAX_WIDGETS}
+                      className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-dashed border-amber-400 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <Plus size={13} /> Add widget
                     </button>
-                  </div>
-                  <div className="space-y-2">
-                    {alertList.slice(0, 4).map(a => (
-                      <div key={a.id} className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
-                        <AlertBadge severity={a.severity} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs text-slate-700 dark:text-slate-300 font-medium truncate">{a.message}</p>
-                          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{a.zone} · {a.ts}</p>
-                        </div>
-                      </div>
-                    ))}
-                    {alertList.length === 0 && (
-                      <p className="text-sm text-slate-400 text-center py-4">All clear 🎉</p>
+                  )}
+                  <button
+                    onClick={() => { setEditingDashboard(e => !e); setCatalogOpen(false); }}
+                    className={cn(
+                      "flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors",
+                      editingDashboard
+                        ? "bg-amber-500 text-white hover:bg-amber-400"
+                        : "border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
                     )}
-                  </div>
+                  >
+                    {editingDashboard ? <><CheckCircle2 size={13} /> Done</> : <><Pencil size={13} /> Edit dashboard</>}
+                  </button>
                 </div>
+              </div>
 
-                {/* Buildings summary */}
-                <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-sm font-bold text-slate-900 dark:text-white">Buildings</h2>
-                    <button onClick={() => setTab("buildings")} className="text-xs text-amber-500 hover:text-amber-400 font-semibold">
-                      Manage →
+              {/* ── Widget catalog modal ── */}
+              {catalogOpen && (
+                <div className="rounded-2xl border-2 border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/5 p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <LayoutGrid size={15} className="text-amber-500" />
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">Widget catalog</h3>
+                      <span className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-500/20 px-2 py-0.5 rounded-full font-semibold">
+                        {activeWidgets.length}/{MAX_WIDGETS} used
+                      </span>
+                    </div>
+                    <button onClick={() => setCatalogOpen(false)} className="p-1 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-500/20 text-slate-500">
+                      <X size={14} />
                     </button>
                   </div>
-                  <div className="space-y-2">
-                    {buildings.map(b => {
-                      const bZones = b.floors.flatMap(f => f.zones);
-                      const on = bZones.filter(z => z.isOn).length;
-                      const bWatts = bZones.reduce((s, z) => s + z.powerWatts, 0);
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {WIDGET_CATALOG.map(w => {
+                      const active = activeWidgets.includes(w.id);
                       return (
-                        <div key={b.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
-                          <Building2 size={15} className="text-slate-400 shrink-0" />
+                        <div
+                          key={w.id}
+                          className={cn(
+                            "flex items-center gap-3 p-3 rounded-xl border transition-all",
+                            active
+                              ? "bg-white dark:bg-slate-900 border-amber-300 dark:border-amber-500/40"
+                              : "bg-white/60 dark:bg-slate-900/60 border-slate-200 dark:border-slate-700"
+                          )}
+                        >
+                          <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", active ? "bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400" : "bg-slate-100 dark:bg-slate-800 text-slate-400")}>
+                            {w.icon}
+                          </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{b.name}</p>
-                            <p className="text-[11px] text-slate-400 dark:text-slate-500">{b.location}</p>
+                            <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{w.label}</p>
+                            <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate">{w.description}</p>
                           </div>
-                          <div className="text-right shrink-0">
-                            <p className="text-xs font-bold text-slate-800 dark:text-white">{on}/{bZones.length} on</p>
-                            <p className="text-[11px] text-slate-400">{(bWatts / 1000).toFixed(1)} kW</p>
-                          </div>
+                          <button
+                            onClick={() => active ? removeWidget(w.id) : addWidget(w.id)}
+                            disabled={!active && activeWidgets.length >= MAX_WIDGETS}
+                            className={cn(
+                              "shrink-0 text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors",
+                              active
+                                ? "bg-red-50 dark:bg-red-500/15 text-red-600 dark:text-red-400 hover:bg-red-100"
+                                : "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 hover:bg-amber-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                            )}
+                          >
+                            {active ? "Remove" : "Add"}
+                          </button>
                         </div>
                       );
                     })}
                   </div>
+                  {activeWidgets.length >= MAX_WIDGETS && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-3 text-center font-medium">
+                      Maximum of {MAX_WIDGETS} widgets reached. Remove one to add another.
+                    </p>
+                  )}
                 </div>
-              </div>
+              )}
+
+              {/* ── Empty state ── */}
+              {activeWidgets.length === 0 && (
+                <div className="rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-12 text-center">
+                  <div className="w-14 h-14 rounded-2xl bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center mx-auto mb-4">
+                    <LayoutGrid size={24} className="text-amber-500" />
+                  </div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-2">Your dashboard is empty</h3>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 max-w-xs mx-auto mb-5">
+                    Personalize your overview by adding widgets from the catalog. You can reorder and remove them any time.
+                  </p>
+                  <button
+                    onClick={() => { setEditingDashboard(true); setCatalogOpen(true); }}
+                    className="inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-white transition-colors shadow"
+                  >
+                    <Plus size={15} /> Add your first widget
+                  </button>
+                </div>
+              )}
+
+              {/* ── KPI row ── */}
+              {(() => {
+                const kpiWidgets = (["kpi-buildings", "kpi-zones", "kpi-power", "kpi-savings"] as WidgetId[]).filter(id => activeWidgets.includes(id));
+                if (kpiWidgets.length === 0) return null;
+
+                const kpiDefs: Record<string, { label: string; value: string; sub: string; icon: React.ReactNode; accent: string }> = {
+                  "kpi-buildings": { label: "Buildings online",  value: String(buildings.length),                          sub: "All systems normal",        icon: <Building2 size={18} className="text-sky-600 dark:text-sky-400" />,     accent: "bg-sky-100 dark:bg-sky-500/20" },
+                  "kpi-zones":     { label: "Zones active",      value: `${zonesOn(buildings)} / ${totalZones(buildings)}`, sub: "Across all floors",         icon: <Zap size={18} className="text-amber-600 dark:text-amber-400" />,       accent: "bg-amber-100 dark:bg-amber-500/20" },
+                  "kpi-power":     { label: "Live power draw",   value: `${(watts / 1000).toFixed(1)} kW`,                 sub: `~${kwhEst} kWh est. today`, icon: <Activity size={18} className="text-violet-600 dark:text-violet-400" />, accent: "bg-violet-100 dark:bg-violet-500/20" },
+                  "kpi-savings":   { label: "Energy savings",    value: `${savings}%`,                                     sub: "vs. last-year baseline",    icon: <TrendingDown size={18} className="text-green-600 dark:text-green-400" />, accent: "bg-green-100 dark:bg-green-500/20" },
+                };
+
+                return (
+                  <div className={cn("grid gap-4", kpiWidgets.length === 4 ? "grid-cols-2 lg:grid-cols-4" : kpiWidgets.length === 3 ? "grid-cols-1 sm:grid-cols-3" : kpiWidgets.length === 2 ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-2")}>
+                    {kpiWidgets.map((id) => {
+                      const d = kpiDefs[id];
+                      const wIdx = activeWidgets.indexOf(id);
+                      return (
+                        <div key={id} className="relative">
+                          <KpiCard label={d.label} value={d.value} sub={d.sub} icon={d.icon} accent={d.accent} />
+                          {editingDashboard && (
+                            <div className="absolute top-2 right-2 flex items-center gap-1">
+                              <button onClick={() => moveWidget(id, -1)} disabled={wIdx === 0} className="p-1 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-amber-500 disabled:opacity-30 shadow-sm" aria-label="Move up"><ChevronUp size={11} /></button>
+                              <button onClick={() => moveWidget(id, 1)} disabled={wIdx === activeWidgets.length - 1} className="p-1 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-amber-500 disabled:opacity-30 shadow-sm" aria-label="Move down"><ChevronDown size={11} /></button>
+                              <button onClick={() => removeWidget(id)} className="p-1 rounded-md bg-white dark:bg-slate-800 border border-red-200 dark:border-red-800 text-red-400 hover:text-red-600 shadow-sm" aria-label="Remove widget"><X size={11} /></button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
+              {/* ── Non-KPI widgets ── */}
+              {activeWidgets.filter(id => !["kpi-buildings","kpi-zones","kpi-power","kpi-savings"].includes(id)).map(id => {
+                const wIdx = activeWidgets.indexOf(id);
+                const widgetControls = editingDashboard ? (
+                  <div className="absolute top-3 right-3 flex items-center gap-1 z-10">
+                    <button onClick={() => moveWidget(id, -1)} disabled={wIdx === 0} className="p-1 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-amber-500 disabled:opacity-30 shadow-sm" aria-label="Move up"><ChevronUp size={11} /></button>
+                    <button onClick={() => moveWidget(id, 1)} disabled={wIdx === activeWidgets.length - 1} className="p-1 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-amber-500 disabled:opacity-30 shadow-sm" aria-label="Move down"><ChevronDown size={11} /></button>
+                    <button onClick={() => removeWidget(id)} className="p-1 rounded-md bg-white dark:bg-slate-800 border border-red-200 dark:border-red-800 text-red-400 hover:text-red-600 shadow-sm" aria-label="Remove widget"><X size={11} /></button>
+                  </div>
+                ) : null;
+
+                if (id === "energy-chart") return (
+                  <div key={id} className="relative">
+                    {widgetControls}
+                    <div className={cn("rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm", editingDashboard && "border-amber-300 dark:border-amber-500/30")}>
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <h2 className="text-sm font-bold text-slate-900 dark:text-white">Energy usage today</h2>
+                          <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">All buildings · kWh per hour</p>
+                        </div>
+                        <span className="text-xs font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2.5 py-1 rounded-full">
+                          ↓ {savings}% vs baseline
+                        </span>
+                      </div>
+                      <EnergyChart />
+                    </div>
+                  </div>
+                );
+
+                if (id === "recent-alerts" || id === "buildings-summary") {
+                  const bothActive = activeWidgets.includes("recent-alerts") && activeWidgets.includes("buildings-summary");
+                  if (bothActive && id === "recent-alerts") {
+                    const alertIdx = activeWidgets.indexOf("recent-alerts");
+                    const bldIdx = activeWidgets.indexOf("buildings-summary");
+                    return (
+                      <div key="alerts-buildings-pair" className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div className="relative">
+                          {editingDashboard && (
+                            <div className="absolute top-3 right-3 flex items-center gap-1 z-10">
+                              <button onClick={() => moveWidget("recent-alerts", -1)} disabled={alertIdx === 0} className="p-1 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-amber-500 disabled:opacity-30 shadow-sm" aria-label="Move up"><ChevronUp size={11} /></button>
+                              <button onClick={() => moveWidget("recent-alerts", 1)} disabled={alertIdx === activeWidgets.length - 1} className="p-1 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-amber-500 disabled:opacity-30 shadow-sm" aria-label="Move down"><ChevronDown size={11} /></button>
+                              <button onClick={() => removeWidget("recent-alerts")} className="p-1 rounded-md bg-white dark:bg-slate-800 border border-red-200 dark:border-red-800 text-red-400 hover:text-red-600 shadow-sm" aria-label="Remove widget"><X size={11} /></button>
+                            </div>
+                          )}
+                          <div className={cn("rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm", editingDashboard && "border-amber-300 dark:border-amber-500/30")}>
+                            <div className="flex items-center justify-between mb-3">
+                              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Recent alerts</h2>
+                              <button onClick={() => setTab("alerts")} className="text-xs text-amber-500 hover:text-amber-400 font-semibold">View all →</button>
+                            </div>
+                            <div className="space-y-2">
+                              {alertList.slice(0, 4).map(a => (
+                                <div key={a.id} className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                                  <AlertBadge severity={a.severity} />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs text-slate-700 dark:text-slate-300 font-medium truncate">{a.message}</p>
+                                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{a.zone} · {a.ts}</p>
+                                  </div>
+                                </div>
+                              ))}
+                              {alertList.length === 0 && <p className="text-sm text-slate-400 text-center py-4">All clear 🎉</p>}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="relative">
+                          {editingDashboard && (
+                            <div className="absolute top-3 right-3 flex items-center gap-1 z-10">
+                              <button onClick={() => moveWidget("buildings-summary", -1)} disabled={bldIdx === 0} className="p-1 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-amber-500 disabled:opacity-30 shadow-sm" aria-label="Move up"><ChevronUp size={11} /></button>
+                              <button onClick={() => moveWidget("buildings-summary", 1)} disabled={bldIdx === activeWidgets.length - 1} className="p-1 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-amber-500 disabled:opacity-30 shadow-sm" aria-label="Move down"><ChevronDown size={11} /></button>
+                              <button onClick={() => removeWidget("buildings-summary")} className="p-1 rounded-md bg-white dark:bg-slate-800 border border-red-200 dark:border-red-800 text-red-400 hover:text-red-600 shadow-sm" aria-label="Remove widget"><X size={11} /></button>
+                            </div>
+                          )}
+                          <div className={cn("rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm", editingDashboard && "border-amber-300 dark:border-amber-500/30")}>
+                            <div className="flex items-center justify-between mb-3">
+                              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Buildings</h2>
+                              <button onClick={() => setTab("buildings")} className="text-xs text-amber-500 hover:text-amber-400 font-semibold">Manage →</button>
+                            </div>
+                            <div className="space-y-2">
+                              {buildings.map(b => {
+                                const bZones = b.floors.flatMap(f => f.zones);
+                                const on = bZones.filter(z => z.isOn).length;
+                                const bWatts = bZones.reduce((s, z) => s + z.powerWatts, 0);
+                                return (
+                                  <div key={b.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                                    <Building2 size={15} className="text-slate-400 shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{b.name}</p>
+                                      <p className="text-[11px] text-slate-400 dark:text-slate-500">{b.location}</p>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                      <p className="text-xs font-bold text-slate-800 dark:text-white">{on}/{bZones.length} on</p>
+                                      <p className="text-[11px] text-slate-400">{(bWatts / 1000).toFixed(1)} kW</p>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (bothActive && id === "buildings-summary") return null;
+                  if (id === "recent-alerts") return (
+                    <div key={id} className="relative">
+                      {widgetControls}
+                      <div className={cn("rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm", editingDashboard && "border-amber-300 dark:border-amber-500/30")}>
+                        <div className="flex items-center justify-between mb-3">
+                          <h2 className="text-sm font-bold text-slate-900 dark:text-white">Recent alerts</h2>
+                          <button onClick={() => setTab("alerts")} className="text-xs text-amber-500 hover:text-amber-400 font-semibold">View all →</button>
+                        </div>
+                        <div className="space-y-2">
+                          {alertList.slice(0, 4).map(a => (
+                            <div key={a.id} className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                              <AlertBadge severity={a.severity} />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs text-slate-700 dark:text-slate-300 font-medium truncate">{a.message}</p>
+                                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{a.zone} · {a.ts}</p>
+                              </div>
+                            </div>
+                          ))}
+                          {alertList.length === 0 && <p className="text-sm text-slate-400 text-center py-4">All clear 🎉</p>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                  return (
+                    <div key={id} className="relative">
+                      {widgetControls}
+                      <div className={cn("rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm", editingDashboard && "border-amber-300 dark:border-amber-500/30")}>
+                        <div className="flex items-center justify-between mb-3">
+                          <h2 className="text-sm font-bold text-slate-900 dark:text-white">Buildings</h2>
+                          <button onClick={() => setTab("buildings")} className="text-xs text-amber-500 hover:text-amber-400 font-semibold">Manage →</button>
+                        </div>
+                        <div className="space-y-2">
+                          {buildings.map(b => {
+                            const bZones = b.floors.flatMap(f => f.zones);
+                            const on = bZones.filter(z => z.isOn).length;
+                            const bWatts = bZones.reduce((s, z) => s + z.powerWatts, 0);
+                            return (
+                              <div key={b.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                                <Building2 size={15} className="text-slate-400 shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{b.name}</p>
+                                  <p className="text-[11px] text-slate-400 dark:text-slate-500">{b.location}</p>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <p className="text-xs font-bold text-slate-800 dark:text-white">{on}/{bZones.length} on</p>
+                                  <p className="text-[11px] text-slate-400">{(bWatts / 1000).toFixed(1)} kW</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (id === "quick-actions") return (
+                  <div key={id} className="relative">
+                    {widgetControls}
+                    <div className={cn("rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm", editingDashboard && "border-amber-300 dark:border-amber-500/30")}>
+                      <h2 className="text-sm font-bold text-slate-900 dark:text-white mb-3">Quick actions</h2>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {[
+                          { label: "All zones on",  icon: <Zap size={14} className="text-amber-500" />,       action: () => setTab("buildings") },
+                          { label: "View alerts",   icon: <Bell size={14} className="text-red-500" />,         action: () => setTab("alerts") },
+                          { label: "Schedules",     icon: <Calendar size={14} className="text-sky-500" />,     action: () => setTab("schedules") },
+                          { label: "Reports",       icon: <BarChart3 size={14} className="text-violet-500" />, action: () => setTab("reports") },
+                        ].map(a => (
+                          <button
+                            key={a.label}
+                            onClick={a.action}
+                            className="flex flex-col items-center gap-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors"
+                          >
+                            <div className="w-8 h-8 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center shadow-sm">
+                              {a.icon}
+                            </div>
+                            <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">{a.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+
+                if (id === "schedule-status") return (
+                  <div key={id} className="relative">
+                    {widgetControls}
+                    <div className={cn("rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm", editingDashboard && "border-amber-300 dark:border-amber-500/30")}>
+                      <div className="flex items-center justify-between mb-3">
+                        <h2 className="text-sm font-bold text-slate-900 dark:text-white">Schedule status</h2>
+                        <button onClick={() => setTab("schedules")} className="text-xs text-amber-500 hover:text-amber-400 font-semibold">View all →</button>
+                      </div>
+                      <div className="space-y-2">
+                        {schedules.slice(0, 3).map(s => (
+                          <div key={s.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                            <div className={cn("w-2 h-2 rounded-full shrink-0", scheduleActive[s.id] ? "bg-green-400" : "bg-slate-300 dark:bg-slate-600")} />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{s.name}</p>
+                              <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate">{s.time}</p>
+                            </div>
+                            <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", scheduleActive[s.id] ? "bg-green-50 dark:bg-green-500/15 text-green-600 dark:text-green-400" : "bg-slate-100 dark:bg-slate-800 text-slate-400")}>
+                              {scheduleActive[s.id] ? "active" : "off"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+
+                return null;
+              })}
             </div>
           )}
 
