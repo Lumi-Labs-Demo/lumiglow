@@ -601,6 +601,21 @@ const SYNC_LOG = [
   { ts: "May 16",       event: "Ticket sync – partial failure", count: "2 errors",    ok: false },
 ];
 
+const HUBSPOT_CONTACTS = [
+  { name: "Sarah Chen",      email: "sarah.chen@acme.com",      stage: "Customer",    tickets: 3, lastSync: "2 min ago"  },
+  { name: "Marcus Johnson",  email: "m.johnson@globex.io",      stage: "Lead",        tickets: 1, lastSync: "14 min ago" },
+  { name: "Priya Patel",     email: "priya@starlight.co",       stage: "MQL",         tickets: 5, lastSync: "1 hr ago"   },
+  { name: "James O'Brien",   email: "jobrien@meridian.net",     stage: "Opportunity", tickets: 2, lastSync: "1 hr ago"   },
+  { name: "Yuki Tanaka",     email: "ytanaka@vertextech.jp",    stage: "Customer",    tickets: 7, lastSync: "3 hr ago"   },
+];
+
+const STAGE_COLORS: Record<string, string> = {
+  Customer:    "bg-green-50 text-green-700 dark:bg-green-500/15 dark:text-green-400",
+  Lead:        "bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-400",
+  MQL:         "bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-400",
+  Opportunity: "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400",
+};
+
 function IntegrationsPanel() {
   const [connected, setConnected]         = useState(false);
   const [connecting, setConnecting]       = useState(false);
@@ -609,6 +624,9 @@ function IntegrationsPanel() {
   const [syncFreq, setSyncFreq]           = useState("15");
   const [syncing, setSyncing]             = useState(false);
   const [syncToast, setSyncToast]         = useState(false);
+  const [activeView, setActiveView]       = useState<"config" | "contacts" | "webhooks">("config");
+  const [webhookEnabled, setWebhookEnabled] = useState(true);
+  const [webhookSaved, setWebhookSaved]   = useState(false);
 
   function handleConnect() {
     setConnecting(true);
@@ -620,8 +638,37 @@ function IntegrationsPanel() {
     setTimeout(() => { setSyncing(false); setSyncToast(true); setTimeout(() => setSyncToast(false), 2500); }, 2000);
   }
 
+  function handleWebhookSave() {
+    setWebhookSaved(true);
+    setTimeout(() => setWebhookSaved(false), 2000);
+  }
+
   return (
     <div className="max-w-2xl space-y-6">
+
+      {/* ── View Tabs ── */}
+      <div className="flex gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 w-fit">
+        {([
+          { key: "config",   label: "Configuration" },
+          { key: "contacts", label: "Contacts" },
+          { key: "webhooks", label: "Webhooks" },
+        ] as { key: "config" | "contacts" | "webhooks"; label: string }[]).map(v => (
+          <button
+            key={v.key}
+            onClick={() => setActiveView(v.key)}
+            className={cn(
+              "px-4 py-1.5 text-xs font-semibold rounded-lg transition-all",
+              activeView === v.key
+                ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm"
+                : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+            )}
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
+
+      {activeView === "config" && <>
 
       {/* ── Connection Card ── */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
@@ -798,6 +845,163 @@ function IntegrationsPanel() {
           ))}
         </div>
       </div>
+
+      </>}
+
+      {/* ── Contacts View ── */}
+      {activeView === "contacts" && (
+        <div className="space-y-4">
+          {/* Stats row */}
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: "Total contacts", value: "142", sub: "from HubSpot" },
+              { label: "Synced today",   value: "38",  sub: "tickets pushed" },
+              { label: "Pending",        value: "2",   sub: "needs review" },
+            ].map(s => (
+              <div key={s.label} className="rounded-xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-4 shadow-sm text-center">
+                <p className="text-xl font-extrabold text-slate-900 dark:text-white">{s.value}</p>
+                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">{s.label}</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500">{s.sub}</p>
+              </div>
+            ))}
+          </div>
+
+          {!connected ? (
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-8 shadow-sm text-center">
+              <AlertCircle size={32} className="mx-auto mb-3 text-slate-300 dark:text-slate-600" />
+              <p className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-1">Not connected</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">Connect HubSpot to see synced contacts</p>
+              <button onClick={() => setActiveView("config")} className="mt-4 text-xs font-semibold text-amber-500 hover:text-amber-400">
+                Go to Configuration →
+              </button>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Synced contacts</h3>
+                <button
+                  onClick={handleSync}
+                  disabled={syncing}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
+                >
+                  <RefreshCw size={12} className={syncing ? "animate-spin" : ""} />
+                  {syncing ? "Syncing…" : "Refresh"}
+                </button>
+              </div>
+              <div className="divide-y divide-slate-50 dark:divide-slate-800/60">
+                {HUBSPOT_CONTACTS.map((c, i) => (
+                  <div key={i} className="flex items-center gap-3 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center text-white text-[11px] font-bold shrink-0">
+                      {c.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">{c.name}</p>
+                      <p className="text-[11px] text-slate-400 truncate">{c.email}</p>
+                    </div>
+                    <div className="hidden sm:flex items-center gap-2 shrink-0">
+                      <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full", STAGE_COLORS[c.stage] || "bg-slate-100 text-slate-500")}>
+                        {c.stage}
+                      </span>
+                      <span className="text-[11px] text-slate-400">{c.tickets} ticket{c.tickets !== 1 ? "s" : ""}</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500 shrink-0 hidden md:block">{c.lastSync}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800 text-center">
+                <button className="text-xs font-semibold text-amber-500 hover:text-amber-400">View all 142 contacts →</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Webhooks View ── */}
+      {activeView === "webhooks" && (
+        <div className="space-y-4">
+          {/* Webhook toggle */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <Globe size={15} className="text-amber-500" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Webhook listener</h3>
+              </div>
+              <button
+                onClick={() => setWebhookEnabled(!webhookEnabled)}
+                className={cn("transition-colors", webhookEnabled ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}
+              >
+                {webhookEnabled ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+              </button>
+            </div>
+
+            {/* Endpoint URL */}
+            <div className="mb-4">
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1.5 block">Webhook endpoint URL</label>
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
+                <code className="text-xs text-slate-700 dark:text-slate-300 flex-1 truncate font-mono">
+                  https://api.lumiglow.io/webhooks/hubspot/acme-corp
+                </code>
+                <button className="text-[11px] font-semibold text-amber-500 hover:text-amber-400 shrink-0">Copy</button>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">Register this URL in your HubSpot app webhook settings</p>
+            </div>
+
+            {/* Subscribed events */}
+            <div>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-3">Subscribed events</p>
+              <div className="space-y-2">
+                {[
+                  { event: "contact.creation",         desc: "New contact added in HubSpot",     active: true  },
+                  { event: "contact.propertyChange",   desc: "Contact lifecycle stage updated",   active: true  },
+                  { event: "deal.creation",            desc: "New deal associated with contact",  active: false },
+                  { event: "deal.stageChange",         desc: "Deal moved to new pipeline stage",  active: false },
+                ].map(ev => (
+                  <div key={ev.event} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-300 truncate">{ev.event}</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">{ev.desc}</p>
+                    </div>
+                    <span className={cn(
+                      "ml-3 shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full",
+                      ev.active
+                        ? "bg-green-50 text-green-600 dark:bg-green-500/15 dark:text-green-400"
+                        : "bg-slate-100 text-slate-400 dark:bg-slate-700 dark:text-slate-500"
+                    )}>
+                      {ev.active ? "active" : "inactive"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Webhook secret */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+              <ShieldCheck size={15} className="text-amber-500" />
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Signature validation</h3>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+              HubSpot signs every webhook payload. LumiGlow validates the <code className="font-mono text-slate-700 dark:text-slate-300">X-HubSpot-Signature-v3</code> header automatically.
+            </p>
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 mb-4">
+              <code className="text-xs text-slate-700 dark:text-slate-300 flex-1 font-mono tracking-widest">••••••••••••••••••••••••</code>
+              <button className="text-[11px] font-semibold text-amber-500 hover:text-amber-400 shrink-0">Reveal</button>
+            </div>
+            <button
+              onClick={handleWebhookSave}
+              className={cn(
+                "flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl transition-all",
+                webhookSaved
+                  ? "bg-green-500 text-white"
+                  : "bg-amber-500 hover:bg-amber-400 text-white shadow hover:shadow-amber-400/30"
+              )}
+            >
+              {webhookSaved ? <><CheckCircle2 size={15} /> Saved!</> : "Save webhook settings"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {syncToast && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-slate-900 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-xl">

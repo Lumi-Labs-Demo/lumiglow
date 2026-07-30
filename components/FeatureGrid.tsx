@@ -49,7 +49,7 @@ const features = [
     color: "text-orange-500",
     bg: "bg-orange-50 dark:bg-orange-950/30",
     border: "border-orange-200 dark:border-orange-800",
-    integrations: ["Azure AD", "Snowflake", "Webhooks", "Kafka", "PagerDuty", "Slack"],
+    integrations: ["HubSpot", "Azure AD", "Snowflake", "Webhooks", "Kafka", "PagerDuty", "Slack"],
   },
   {
     icon: BarChart3,
