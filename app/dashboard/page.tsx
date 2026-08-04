@@ -9,7 +9,8 @@ import {
   TrendingDown, Activity, Users, ShieldCheck, Search,
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
   Palette, Upload, Eye, Plug, RefreshCw, ArrowLeftRight,
-  Database, Globe, Link2, AlertCircle, Clock,
+  Database, Globe, Link2, AlertCircle, Clock, Wifi,
+  Gauge, Wrench, Layers as LayersIcon, ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -24,7 +25,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings" | "integrations";
+type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings" | "integrations" | "api-health";
 
 interface BrandingConfig {
   companyName: string;
@@ -832,6 +833,265 @@ const SYNC_LOG = [
   { ts: "May 16",       event: "Ticket sync – partial failure", count: "2 errors",    ok: false },
 ];
 
+// ─── API Health Panel ─────────────────────────────────────────────────────────
+
+const API_ENDPOINTS = [
+  { id: "e1", path: "/api/v2/zones",          method: "GET",  p50: 82,  p99: 620,  err504: 14, status: "degraded" as const },
+  { id: "e2", path: "/api/v2/zones/:id/dim",  method: "POST", p50: 95,  p99: 4800, err504: 38, status: "critical" as const },
+  { id: "e3", path: "/api/v2/schedules",      method: "GET",  p50: 44,  p99: 210,  err504: 0,  status: "healthy"  as const },
+  { id: "e4", path: "/api/v2/energy/report",  method: "GET",  p50: 310, p99: 8200, err504: 61, status: "critical" as const },
+  { id: "e5", path: "/api/v2/buildings",      method: "GET",  p50: 38,  p99: 190,  err504: 0,  status: "healthy"  as const },
+  { id: "e6", path: "/api/v2/alerts",         method: "GET",  p50: 55,  p99: 350,  err504: 2,  status: "degraded" as const },
+];
+
+const ERROR_HISTORY = [
+  { hour: "00:00", count: 2  }, { hour: "02:00", count: 1  }, { hour: "04:00", count: 0  },
+  { hour: "06:00", count: 3  }, { hour: "08:00", count: 12 }, { hour: "10:00", count: 28 },
+  { hour: "12:00", count: 45 }, { hour: "14:00", count: 61 }, { hour: "16:00", count: 53 },
+  { hour: "18:00", count: 38 }, { hour: "20:00", count: 22 }, { hour: "22:00", count: 14 },
+];
+const ERROR_HISTORY_FIXED = ERROR_HISTORY.map((d, i) => ({ ...d, count: i < 8 ? d.count : Math.max(0, Math.round(d.count * 0.05)) }));
+const FIX_STEPS = ["Profiling slow endpoints…","Tuning gateway timeout budget…","Optimising DB query plan…","Enabling idempotent retries…","Deploying hotfix…","Validating in staging…","Rollout complete ✓"];
+
+function ApiHealthPanel() {
+  const [fixed, setFixed]     = useState(false);
+  const [fixing, setFixing]   = useState(false);
+  const [fixStep, setFixStep] = useState(0);
+  const [gwTimeout, setGwTimeout]   = useState("30");
+  const [svcTimeout, setSvcTimeout] = useState("25");
+  const [retries, setRetries] = useState(false);
+  const [saved, setSaved]     = useState(false);
+
+  const endpoints = fixed
+    ? API_ENDPOINTS.map(e => ({ ...e, status: "healthy" as const, err504: 0, p99: Math.round(e.p99 * 0.12) }))
+    : API_ENDPOINTS;
+
+  const totalErrors   = endpoints.reduce((s, e) => s + e.err504, 0);
+  const criticalCount = endpoints.filter(e => e.status === "critical").length;
+  const degradedCount = endpoints.filter(e => e.status === "degraded").length;
+  const history       = fixed ? ERROR_HISTORY_FIXED : ERROR_HISTORY;
+
+  function applyFix() {
+    setFixing(true); setFixStep(0);
+    let step = 0;
+    const iv = setInterval(() => {
+      step++; setFixStep(step);
+      if (step >= FIX_STEPS.length - 1) { clearInterval(iv); setTimeout(() => { setFixing(false); setFixed(true); }, 600); }
+    }, 700);
+  }
+
+  const W = 600, H = 140, padL = 36, padR = 12, padT = 12, padB = 28;
+  const cW = W - padL - padR, cH = H - padT - padB;
+  const maxE = Math.max(...history.map(d => d.count), 1);
+  const xSt = cW / (history.length - 1);
+  const gpx = (i: number) => padL + i * xSt;
+  const gpy = (v: number) => padT + cH - (v / maxE) * cH;
+  const linePath = history.map((d, i) => `${i === 0 ? "M" : "L"}${gpx(i).toFixed(1)},${gpy(d.count).toFixed(1)}`).join(" ");
+  const fillPath = linePath + ` L${gpx(history.length - 1).toFixed(1)},${(padT + cH).toFixed(1)} L${padL},${(padT + cH).toFixed(1)} Z`;
+
+  const statusColor = (s: string) =>
+    s === "critical" ? "text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/15" :
+    s === "degraded" ? "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/15" :
+                       "text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15";
+  const statusDot = (s: string) =>
+    s === "critical" ? "bg-red-500" : s === "degraded" ? "bg-amber-500" : "bg-green-500";
+
+  return (
+    <div className="max-w-3xl space-y-6">
+      {/* Status banner */}
+      <div className={cn("rounded-2xl border p-5 flex items-start gap-4 shadow-sm",
+        fixed ? "bg-green-50 dark:bg-green-500/5 border-green-200/60 dark:border-green-500/20"
+              : "bg-red-50 dark:bg-red-500/5 border-red-200/60 dark:border-red-500/20"
+      )}>
+        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+          fixed ? "bg-green-100 dark:bg-green-500/20" : "bg-red-100 dark:bg-red-500/20"
+        )}>
+          {fixed ? <CheckCircle2 size={20} className="text-green-600 dark:text-green-400" /> : <AlertCircle size={20} className="text-red-600 dark:text-red-400" />}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className={cn("text-sm font-bold", fixed ? "text-green-800 dark:text-green-300" : "text-red-800 dark:text-red-300")}>
+            {fixed ? "All endpoints healthy — 504 errors resolved" : `${totalErrors} gateway timeouts in the last 24 h`}
+          </p>
+          <p className={cn("text-xs mt-0.5", fixed ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>
+            {fixed ? "Timeout budget optimised · DB queries tuned · Idempotent retries enabled"
+                   : `${criticalCount} critical · ${degradedCount} degraded · root cause: LUMI-504`}
+          </p>
+        </div>
+        {!fixed && !fixing && (
+          <button onClick={applyFix} className="shrink-0 flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-500 rounded-xl transition-colors shadow">
+            <Wrench size={13} /> Apply fix
+          </button>
+        )}
+        {fixing && (
+          <span className="shrink-0 flex items-center gap-2 text-xs font-semibold text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-500/20 px-3 py-1.5 rounded-xl">
+            <RefreshCw size={12} className="animate-spin" /> {FIX_STEPS[fixStep]}
+          </span>
+        )}
+      </div>
+
+      {/* Endpoint table */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+          <Globe size={15} className="text-amber-500" />
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Endpoint health</h3>
+          <span className="ml-auto text-[11px] text-slate-400">{endpoints.filter(e => e.status === "healthy").length}/{endpoints.length} healthy</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-slate-100 dark:border-slate-800">
+                <th className="text-left text-[11px] font-semibold text-slate-400 px-5 py-2.5">Endpoint</th>
+                <th className="text-left text-[11px] font-semibold text-slate-400 px-3 py-2.5 hidden sm:table-cell">Method</th>
+                <th className="text-left text-[11px] font-semibold text-slate-400 px-3 py-2.5">Status</th>
+                <th className="text-right text-[11px] font-semibold text-slate-400 px-3 py-2.5 hidden md:table-cell">p50 ms</th>
+                <th className="text-right text-[11px] font-semibold text-slate-400 px-3 py-2.5 hidden md:table-cell">p99 ms</th>
+                <th className="text-right text-[11px] font-semibold text-slate-400 px-5 py-2.5">504s / 24h</th>
+              </tr>
+            </thead>
+            <tbody>
+              {endpoints.map((e, i) => (
+                <tr key={e.id} className={cn("border-b border-slate-50 dark:border-slate-800/60 last:border-0", i % 2 !== 0 && "bg-slate-50/50 dark:bg-slate-800/20")}>
+                  <td className="px-5 py-3 font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">{e.path}</td>
+                  <td className="px-3 py-3 hidden sm:table-cell"><span className="font-mono font-bold text-sky-600 dark:text-sky-400">{e.method}</span></td>
+                  <td className="px-3 py-3">
+                    <span className={cn("flex items-center gap-1.5 w-fit text-[11px] font-bold px-2 py-0.5 rounded-full", statusColor(e.status))}>
+                      <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", statusDot(e.status), e.status !== "healthy" && !fixed && "animate-pulse")} />
+                      {e.status}
+                    </span>
+                  </td>
+                  <td className="px-3 py-3 text-right tabular-nums text-slate-600 dark:text-slate-300 hidden md:table-cell">{e.p50}</td>
+                  <td className={cn("px-3 py-3 text-right tabular-nums font-semibold hidden md:table-cell", e.p99 > 3000 ? "text-red-500" : e.p99 > 500 ? "text-amber-500" : "text-slate-500 dark:text-slate-400")}>{e.p99}</td>
+                  <td className={cn("px-5 py-3 text-right tabular-nums font-bold", e.err504 > 30 ? "text-red-500" : e.err504 > 5 ? "text-amber-500" : "text-slate-400 dark:text-slate-500")}>{e.err504}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Error rate chart */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">504 error rate — today</h3>
+            <p className="text-xs text-slate-400 mt-0.5">Errors per hour across all endpoints</p>
+          </div>
+          {fixed && <span className="text-xs font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2.5 py-1 rounded-full flex items-center gap-1"><TrendingDown size={11} /> ↓ 95% after fix</span>}
+        </div>
+        <div className="w-full overflow-x-auto">
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 280, maxHeight: 160 }}>
+            <defs>
+              <linearGradient id="errGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={fixed ? "#22c55e" : "#ef4444"} stopOpacity="0.35" />
+                <stop offset="100%" stopColor={fixed ? "#22c55e" : "#ef4444"} stopOpacity="0.02" />
+              </linearGradient>
+            </defs>
+            {[0, 0.5, 1].map(t => { const y = padT + cH * (1 - t); return (
+              <g key={t}>
+                <line x1={padL} y1={y} x2={W - padR} y2={y} stroke="currentColor" strokeOpacity="0.07" strokeWidth="1" className="text-slate-500" />
+                <text x={padL - 4} y={y + 4} textAnchor="end" fontSize="9" fill="currentColor" fillOpacity="0.45" className="text-slate-500">{Math.round(maxE * t)}</text>
+              </g>
+            ); })}
+            <path d={fillPath} fill="url(#errGrad)" />
+            <path d={linePath} fill="none" stroke={fixed ? "#22c55e" : "#ef4444"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            {history.map((d, i) => i % 3 === 0 && (
+              <text key={i} x={gpx(i)} y={H - 6} textAnchor="middle" fontSize="9" fill="currentColor" fillOpacity="0.4" className="text-slate-500">{d.hour}</text>
+            ))}
+          </svg>
+        </div>
+      </div>
+
+      {/* Timeout config */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-5">
+          <Gauge size={15} className="text-amber-500" />
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Timeout budget</h3>
+          <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400">Root cause: LUMI-504</span>
+        </div>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1.5 block font-medium">Gateway timeout (seconds)</label>
+              <select value={gwTimeout} onChange={e => setGwTimeout(e.target.value)} className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400">
+                {["10","15","20","30","60"].map(v => <option key={v} value={v}>{v}s</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 dark:text-slate-400 mb-1.5 block font-medium">Service timeout (seconds)</label>
+              <select value={svcTimeout} onChange={e => setSvcTimeout(e.target.value)} className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400">
+                {["8","12","15","20","25"].map(v => <option key={v} value={v}>{v}s</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="flex items-center justify-between py-3 border-t border-slate-100 dark:border-slate-800">
+            <div>
+              <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">Idempotent retries</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">Retry safe GET/HEAD requests once on 504</p>
+            </div>
+            <button onClick={() => setRetries(!retries)} className={cn("transition-colors ml-4 shrink-0", retries ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>
+              {retries ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+            </button>
+          </div>
+          <button onClick={() => { setSaved(true); setTimeout(() => setSaved(false), 2000); }}
+            className={cn("flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl transition-all", saved ? "bg-green-500 text-white" : "bg-amber-500 hover:bg-amber-400 text-white shadow")}>
+            {saved ? <><CheckCircle2 size={15} /> Saved!</> : "Save configuration"}
+          </button>
+        </div>
+      </div>
+
+      {/* Remediation plan */}
+      {!fixed && (
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <LayersIcon size={15} className="text-amber-500" />
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Remediation plan</h3>
+          </div>
+          <ol className="space-y-3">
+            {[
+              { step: "Profile slow endpoints and trace dependency chain",       done: true  },
+              { step: "Identify primary bottleneck (DB query at /energy/report)", done: true  },
+              { step: "Tune gateway & service timeout budgets",                  done: false },
+              { step: "Optimise slow query — add index on building_id + ts",     done: false },
+              { step: "Enable idempotent retries for safe GET/HEAD requests",    done: false },
+              { step: "Add 504 rate alert at 10 errors / 5 min",                done: false },
+              { step: "Validate in staging under load; progressive rollout",     done: false },
+            ].map((item, i) => (
+              <li key={i} className="flex items-start gap-3">
+                <div className={cn("w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-[10px] font-bold",
+                  item.done ? "bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400" : "bg-slate-100 dark:bg-slate-800 text-slate-400"
+                )}>{item.done ? <CheckCircle2 size={12} /> : i + 1}</div>
+                <p className={cn("text-xs leading-relaxed", item.done ? "text-slate-400 line-through" : "text-slate-700 dark:text-slate-300")}>{item.step}</p>
+              </li>
+            ))}
+          </ol>
+          <button onClick={applyFix} disabled={fixing}
+            className="mt-5 flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-amber-500 hover:bg-amber-400 rounded-xl transition-all shadow disabled:opacity-60">
+            {fixing ? <><RefreshCw size={14} className="animate-spin" /> {FIX_STEPS[fixStep]}</> : <><Wrench size={14} /> Apply fix (demo)</>}
+          </button>
+        </div>
+      )}
+
+      {/* Success state */}
+      {fixed && (
+        <div className="rounded-2xl border border-green-200/60 dark:border-green-500/20 bg-green-50 dark:bg-green-500/5 p-6 shadow-sm">
+          <div className="flex items-center gap-3 mb-3">
+            <CheckCircle2 size={18} className="text-green-600 dark:text-green-400 shrink-0" />
+            <h3 className="text-sm font-bold text-green-800 dark:text-green-300">Fix deployed successfully</h3>
+          </div>
+          <ul className="space-y-1.5">
+            {["Gateway timeout reduced to 20s, service timeout to 15s","Slow DB query on /energy/report indexed — p99 down 8.2s → 980ms","Idempotent retry enabled for GET/HEAD — transparent to clients","Alert configured: page on-call if 504 rate exceeds 10 / 5 min"].map((s, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs text-green-700 dark:text-green-400">
+                <ArrowRight size={11} className="mt-0.5 shrink-0" />{s}
+              </li>
+            ))}
+          </ul>
+          <button onClick={() => { setFixed(false); setFixStep(0); }} className="mt-4 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 underline">Reset demo</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function IntegrationsPanel() {
   const [activeInteg, setActiveInteg]     = useState<"hubspot" | "intercom">("hubspot");
   const [connected, setConnected]         = useState(false);
@@ -1141,6 +1401,7 @@ export default function DashboardPage() {
     { id: "schedules",    label: "Schedules",    icon: <Calendar size={17} /> },
     { id: "reports",      label: "Reports",      icon: <BarChart3 size={17} /> },
     { id: "integrations", label: "Integrations", icon: <Plug size={17} /> },
+    { id: "api-health",   label: "API Health",   icon: <Wifi size={17} />, badge: 2 },
     { id: "settings",     label: "Settings",     icon: <Settings size={17} /> },
   ];
 
@@ -1635,6 +1896,9 @@ export default function DashboardPage() {
 
           {/* ── INTEGRATIONS ── */}
           {tab === "integrations" && <IntegrationsPanel />}
+
+          {/* ── API HEALTH ── */}
+          {tab === "api-health" && <ApiHealthPanel />}
 
           {/* ── SETTINGS ── */}
           {tab === "settings" && <SettingsPanel branding={branding} onBrandingChange={setBranding} />}
