@@ -10,6 +10,7 @@ import {
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
   Palette, Upload, Eye, Plug, RefreshCw, ArrowLeftRight,
   Database, Globe, Link2, AlertCircle, Clock,
+  ClipboardList, Plus, Trash2, MessageSquare, Flag, Send,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -24,7 +25,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings" | "integrations";
+type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings" | "integrations" | "standup";
 
 interface BrandingConfig {
   companyName: string;
@@ -280,6 +281,348 @@ const reports = [
   { id: "r4", name: "Zone Uptime Report",     scope: "West Campus",   generated: "Apr 28, 2025",  size: "56 KB"  },
   { id: "r5", name: "Firmware Inventory",     scope: "All buildings", generated: "Apr 25, 2025",  size: "34 KB"  },
 ];
+
+// ─── Standup Panel ────────────────────────────────────────────────────────────
+
+interface StandupEntry {
+  id: string;
+  author: string;
+  initials: string;
+  color: string;
+  submittedAt: string;
+  progress: string;
+  blockers: string;
+  priorities: string;
+}
+
+interface ActionItem {
+  id: string;
+  text: string;
+  owner: string;
+  done: boolean;
+}
+
+const WEEK_LABEL = "Week of Aug 4, 2026";
+
+const initialEntries: StandupEntry[] = [
+  {
+    id: "e1",
+    author: "Jordan Davis",
+    initials: "JD",
+    color: "#f59e0b",
+    submittedAt: "Today 8:47 AM",
+    progress: "Completed firmware rollout to West Campus zones. Energy savings up ~12% vs baseline.",
+    blockers: "Waiting on vendor certificate renewal for EMEA Office — blocking remote override API.",
+    priorities: "Finish EMEA cert renewal follow-up. Review Q3 ESG draft with marketing.",
+  },
+  {
+    id: "e2",
+    author: "Alex Kim",
+    initials: "AK",
+    color: "#6366f1",
+    submittedAt: "Today 9:02 AM",
+    progress: "Deployed schedule conflict resolver to staging. All edge-case tests passing.",
+    blockers: "No blockers.",
+    priorities: "Merge conflict resolver to main. Pair with QA on holiday blackout validation.",
+  },
+  {
+    id: "e3",
+    author: "Sam Rivera",
+    initials: "SR",
+    color: "#10b981",
+    submittedAt: "Today 9:15 AM",
+    progress: "Integrated Intercom webhook retry logic. 3 previously-failing deliveries now stable.",
+    blockers: "Need access to the new Datadog dashboard environment — ticket open with IT.",
+    priorities: "Monitor webhook delivery rates post-deploy. Finalize Datadog access request.",
+  },
+];
+
+const initialActions: ActionItem[] = [
+  { id: "a1", text: "Chase EMEA vendor cert renewal (Ticket #2847)", owner: "Jordan Davis", done: false },
+  { id: "a2", text: "Merge schedule conflict resolver PR #114", owner: "Alex Kim", done: false },
+  { id: "a3", text: "Follow up with IT on Datadog dashboard access", owner: "Sam Rivera", done: true },
+];
+
+function StandupPanel() {
+  const [entries, setEntries] = useState<StandupEntry[]>(initialEntries);
+  const [actions, setActions] = useState<ActionItem[]>(initialActions);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ progress: "", blockers: "", priorities: "" });
+  const [submitted, setSubmitted] = useState(false);
+  const [newAction, setNewAction] = useState("");
+  const [newActionOwner, setNewActionOwner] = useState("Jordan Davis");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  function submitUpdate() {
+    if (!form.progress.trim()) return;
+    const entry: StandupEntry = {
+      id: `e${Date.now()}`,
+      author: "Jordan Davis",
+      initials: "JD",
+      color: "#f59e0b",
+      submittedAt: "Just now",
+      progress: form.progress,
+      blockers: form.blockers || "No blockers.",
+      priorities: form.priorities,
+    };
+    setEntries(prev => [entry, ...prev.filter(e => e.author !== "Jordan Davis")]);
+    setForm({ progress: "", blockers: "", priorities: "" });
+    setShowForm(false);
+    setSubmitted(true);
+    setTimeout(() => setSubmitted(false), 3000);
+  }
+
+  function addAction() {
+    if (!newAction.trim()) return;
+    setActions(prev => [...prev, { id: `a${Date.now()}`, text: newAction, owner: newActionOwner, done: false }]);
+    setNewAction("");
+  }
+
+  function toggleAction(id: string) {
+    setActions(prev => prev.map(a => a.id === id ? { ...a, done: !a.done } : a));
+  }
+
+  function removeAction(id: string) {
+    setActions(prev => prev.filter(a => a.id !== id));
+  }
+
+  const openCount = actions.filter(a => !a.done).length;
+  const blockerCount = entries.filter(e => e.blockers.toLowerCase() !== "no blockers." && e.blockers.trim() !== "").length;
+
+  return (
+    <div className="max-w-3xl space-y-6">
+      {/* Header row */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <ClipboardList size={20} className="text-amber-500" />
+            Weekly Standup
+          </h2>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{WEEK_LABEL} · {entries.length} updates submitted</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {submitted && (
+            <span className="flex items-center gap-1 text-xs font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-3 py-1.5 rounded-full">
+              <CheckCircle2 size={12} /> Update submitted!
+            </span>
+          )}
+          <button
+            onClick={() => setShowForm(f => !f)}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl bg-amber-500 hover:bg-amber-400 text-white shadow transition-colors"
+          >
+            <Plus size={14} />
+            {showForm ? "Cancel" : "Submit my update"}
+          </button>
+        </div>
+      </div>
+
+      {/* Summary badges */}
+      <div className="flex flex-wrap gap-3">
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-400 shadow-sm">
+          <Users size={13} className="text-amber-500" />
+          <span>{entries.length} team updates</span>
+        </div>
+        <div className={cn(
+          "flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-medium shadow-sm",
+          blockerCount > 0
+            ? "bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/25 text-red-600 dark:text-red-400"
+            : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700/60 text-slate-500 dark:text-slate-400"
+        )}>
+          <Flag size={13} />
+          <span>{blockerCount} blocker{blockerCount !== 1 ? "s" : ""}</span>
+        </div>
+        <div className={cn(
+          "flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-medium shadow-sm",
+          openCount > 0
+            ? "bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/25 text-amber-700 dark:text-amber-400"
+            : "bg-green-50 dark:bg-green-500/10 border-green-200 dark:border-green-500/25 text-green-600 dark:text-green-400"
+        )}>
+          <CheckCircle2 size={13} />
+          <span>{openCount} open action{openCount !== 1 ? "s" : ""}</span>
+        </div>
+      </div>
+
+      {/* Async submission form */}
+      {showForm && (
+        <div className="rounded-2xl border border-amber-200 dark:border-amber-500/30 bg-amber-50/50 dark:bg-amber-500/5 p-5 shadow-sm space-y-4">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-amber-500 flex items-center justify-center text-white text-xs font-bold shrink-0">JD</div>
+            <span className="text-sm font-semibold text-slate-900 dark:text-white">Submit your standup update</span>
+            <span className="ml-auto text-[11px] text-slate-400">Async · visible to team</span>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1 block">✅ Progress since last standup *</label>
+            <textarea
+              rows={2}
+              value={form.progress}
+              onChange={e => setForm(f => ({ ...f, progress: e.target.value }))}
+              placeholder="What did you complete or advance this week?"
+              className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1 block">🚧 Blockers</label>
+            <textarea
+              rows={2}
+              value={form.blockers}
+              onChange={e => setForm(f => ({ ...f, blockers: e.target.value }))}
+              placeholder="Any blockers or dependencies? Leave blank if none."
+              className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1 block">🎯 Priorities this week</label>
+            <textarea
+              rows={2}
+              value={form.priorities}
+              onChange={e => setForm(f => ({ ...f, priorities: e.target.value }))}
+              placeholder="Top 2–3 things you're focused on this week."
+              className="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+            />
+          </div>
+          <button
+            onClick={submitUpdate}
+            disabled={!form.progress.trim()}
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-white shadow transition-colors"
+          >
+            <Send size={13} />
+            Submit update
+          </button>
+        </div>
+      )}
+
+      {/* Team updates */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 dark:border-slate-800">
+          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Team Updates</span>
+          <span className="text-[11px] text-slate-400">{WEEK_LABEL}</span>
+        </div>
+        <div className="divide-y divide-slate-100 dark:divide-slate-800">
+          {entries.map(entry => {
+            const isExpanded = expandedId === entry.id;
+            const hasBlocker = entry.blockers.toLowerCase() !== "no blockers." && entry.blockers.trim() !== "";
+            return (
+              <div key={entry.id} className="px-5 py-4">
+                <div className="flex items-start gap-3">
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 mt-0.5"
+                    style={{ backgroundColor: entry.color }}
+                  >
+                    {entry.initials}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-semibold text-slate-900 dark:text-white">{entry.author}</span>
+                      {hasBlocker && (
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/15 px-1.5 py-0.5 rounded-full">
+                          <Flag size={9} /> Blocker
+                        </span>
+                      )}
+                      <span className="ml-auto text-[11px] text-slate-400 shrink-0">{entry.submittedAt}</span>
+                    </div>
+                    <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">{entry.progress}</p>
+
+                    {isExpanded && (
+                      <div className="mt-3 space-y-2.5">
+                        <div>
+                          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Blockers</p>
+                          <p className={cn(
+                            "text-sm leading-relaxed",
+                            hasBlocker ? "text-red-600 dark:text-red-400" : "text-slate-400 dark:text-slate-500"
+                          )}>{entry.blockers}</p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Priorities this week</p>
+                          <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">{entry.priorities}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => setExpandedId(isExpanded ? null : entry.id)}
+                      className="mt-2 flex items-center gap-1 text-[11px] font-medium text-amber-500 hover:text-amber-400 transition-colors"
+                    >
+                      {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                      {isExpanded ? "Show less" : "Show blockers & priorities"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Action items */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 dark:border-slate-800">
+          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+            <MessageSquare size={13} />
+            Action Items
+          </span>
+          <span className={cn(
+            "text-[11px] font-semibold px-2 py-0.5 rounded-full",
+            openCount > 0 ? "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400" : "bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400"
+          )}>
+            {openCount} open
+          </span>
+        </div>
+        <div className="divide-y divide-slate-100 dark:divide-slate-800">
+          {actions.map(action => (
+            <div key={action.id} className="flex items-start gap-3 px-5 py-3">
+              <button
+                onClick={() => toggleAction(action.id)}
+                className={cn(
+                  "mt-0.5 w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors",
+                  action.done
+                    ? "bg-green-500 border-green-500 text-white"
+                    : "border-slate-300 dark:border-slate-600"
+                )}
+              >
+                {action.done && <CheckCircle2 size={10} />}
+              </button>
+              <div className="flex-1 min-w-0">
+                <p className={cn("text-sm", action.done ? "line-through text-slate-400 dark:text-slate-600" : "text-slate-800 dark:text-slate-200")}>
+                  {action.text}
+                </p>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{action.owner}</p>
+              </div>
+              <button
+                onClick={() => removeAction(action.id)}
+                className="text-slate-300 dark:text-slate-600 hover:text-red-400 transition-colors mt-0.5 shrink-0"
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          ))}
+        </div>
+        {/* Add action item */}
+        <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2 flex-wrap">
+          <input
+            value={newAction}
+            onChange={e => setNewAction(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") addAction(); }}
+            placeholder="Add an action item…"
+            className="flex-1 min-w-0 px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
+          />
+          <select
+            value={newActionOwner}
+            onChange={e => setNewActionOwner(e.target.value)}
+            className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+          >
+            {["Jordan Davis", "Alex Kim", "Sam Rivera"].map(n => <option key={n}>{n}</option>)}
+          </select>
+          <button
+            onClick={addAction}
+            className="flex items-center gap-1 px-3 py-2 text-sm font-semibold rounded-lg bg-amber-500 hover:bg-amber-400 text-white transition-colors"
+          >
+            <Plus size={14} /> Add
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Settings Panel ───────────────────────────────────────────────────────────
 
@@ -882,6 +1225,7 @@ export default function DashboardPage() {
     { id: "alerts",       label: "Alerts",       icon: <Bell size={17} />, badge: alertList.filter(a => a.severity !== "info").length },
     { id: "schedules",    label: "Schedules",    icon: <Calendar size={17} /> },
     { id: "reports",      label: "Reports",      icon: <BarChart3 size={17} /> },
+    { id: "standup",      label: "Standup",      icon: <ClipboardList size={17} /> },
     { id: "integrations", label: "Integrations", icon: <Plug size={17} /> },
     { id: "settings",     label: "Settings",     icon: <Settings size={17} /> },
   ];
@@ -1374,6 +1718,9 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
+
+          {/* ── STANDUP ── */}
+          {tab === "standup" && <StandupPanel />}
 
           {/* ── INTEGRATIONS ── */}
           {tab === "integrations" && <IntegrationsPanel />}
