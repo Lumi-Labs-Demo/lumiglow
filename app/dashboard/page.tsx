@@ -9,7 +9,8 @@ import {
   TrendingDown, Activity, Users, ShieldCheck, Search,
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
   Palette, Upload, Eye, Plug, RefreshCw, ArrowLeftRight,
-  Database, Globe, Link2, AlertCircle, Clock,
+  Database, Globe, Link2, AlertCircle, Clock, Server,
+  Timer, TrendingUp, Gauge,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -24,7 +25,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings" | "integrations";
+type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings" | "integrations" | "api-status";
 
 interface BrandingConfig {
   companyName: string;
@@ -1067,6 +1068,302 @@ function IntegrationsPanel() {
   );
 }
 
+// ─── API Status Panel (LUMI-504 fix demo) ─────────────────────────────────────
+
+const API_ENDPOINTS = [
+  { id: "e1", path: "/api/v2/zones",          method: "GET",  p50: 42,  p95: 118,  p99: 210,  rate504: 0.0 },
+  { id: "e2", path: "/api/v2/schedules",      method: "GET",  p50: 38,  p95: 102,  p99: 198,  rate504: 0.0 },
+  { id: "e3", path: "/api/v2/energy/report",  method: "POST", p50: 310, p95: 820,  p99: 1490, rate504: 0.0 },
+  { id: "e4", path: "/api/v2/buildings/sync", method: "POST", p50: 520, p95: 1100, p99: 2200, rate504: 0.0 },
+  { id: "e5", path: "/api/v2/integrations",   method: "GET",  p50: 55,  p95: 140,  p99: 280,  rate504: 0.0 },
+];
+
+const TIMEOUT_CHART_DATA = [
+  { hour: "12 AM", before: 14.2, after: 0.3 },
+  { hour: "2 AM",  before: 11.8, after: 0.2 },
+  { hour: "4 AM",  before: 13.1, after: 0.4 },
+  { hour: "6 AM",  before: 18.5, after: 0.3 },
+  { hour: "8 AM",  before: 22.4, after: 0.5 },
+  { hour: "10 AM", before: 19.7, after: 0.2 },
+  { hour: "12 PM", before: 24.1, after: 0.3 },
+  { hour: "2 PM",  before: 21.3, after: 0.4 },
+  { hour: "4 PM",  before: 16.9, after: 0.2 },
+  { hour: "6 PM",  before: 12.4, after: 0.1 },
+  { hour: "8 PM",  before: 9.8,  after: 0.2 },
+  { hour: "10 PM", before: 8.1,  after: 0.1 },
+];
+
+const API_INCIDENTS = [
+  { id: "i1", ts: "Today 14:03",  endpoint: "/api/v2/buildings/sync", ok: true,  msg: "504 spike resolved — query timeout tightened" },
+  { id: "i2", ts: "Today 09:17",  endpoint: "/api/v2/energy/report",  ok: true,  msg: "Slow upstream dependency identified & cached"   },
+  { id: "i3", ts: "Yesterday",    endpoint: "/api/v2/integrations",   ok: true,  msg: "Retry storm resolved — idempotency key added"  },
+  { id: "i4", ts: "2 days ago",   endpoint: "/api/v2/buildings/sync", ok: false, msg: "DB query plan regression — index added"         },
+  { id: "i5", ts: "3 days ago",   endpoint: "/api/v2/energy/report",  ok: false, msg: "504 rate peaked at 24% — root-cause: N+1 query" },
+];
+
+function ErrorRateChart() {
+  const [hovIdx, setHovIdx] = useState<number | null>(null);
+  const W = 700, H = 200, padL = 44, padR = 16, padT = 16, padB = 32;
+  const chartW = W - padL - padR;
+  const chartH = H - padT - padB;
+  const maxY = 28;
+  const xStep = chartW / (TIMEOUT_CHART_DATA.length - 1);
+  function px(i: number) { return padL + i * xStep; }
+  function py(v: number) { return padT + chartH - (v / maxY) * chartH; }
+  const beforePath = TIMEOUT_CHART_DATA.map((d, i) => `${i === 0 ? "M" : "L"}${px(i).toFixed(1)},${py(d.before).toFixed(1)}`).join(" ");
+  const afterPath  = TIMEOUT_CHART_DATA.map((d, i) => `${i === 0 ? "M" : "L"}${px(i).toFixed(1)},${py(d.after).toFixed(1)}`).join(" ");
+  const beforeFill = beforePath + ` L${px(TIMEOUT_CHART_DATA.length - 1).toFixed(1)},${(padT + chartH).toFixed(1)} L${padL},${(padT + chartH).toFixed(1)} Z`;
+  return (
+    <div className="relative w-full overflow-x-auto">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 320, maxHeight: 220 }} onMouseLeave={() => setHovIdx(null)}>
+        <defs>
+          <linearGradient id="beforeGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#ef4444" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="#ef4444" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        {[0, 0.25, 0.5, 0.75, 1].map(t => {
+          const y = padT + chartH * (1 - t);
+          return (
+            <g key={t}>
+              <line x1={padL} y1={y} x2={W - padR} y2={y} stroke="currentColor" strokeOpacity="0.07" strokeWidth="1" className="text-slate-500" />
+              <text x={padL - 6} y={y + 4} textAnchor="end" fontSize="9" fill="currentColor" fillOpacity="0.4" className="text-slate-500">{(maxY * t).toFixed(0)}%</text>
+            </g>
+          );
+        })}
+        <path d={beforeFill} fill="url(#beforeGrad)" />
+        <path d={beforePath} fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="5 3" />
+        <path d={afterPath}  fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        {TIMEOUT_CHART_DATA.map((d, i) => i % 2 === 0 && (
+          <text key={i} x={px(i)} y={H - 6} textAnchor="middle" fontSize="9" fill="currentColor" fillOpacity="0.45" className="text-slate-500">{d.hour}</text>
+        ))}
+        {TIMEOUT_CHART_DATA.map((d, i) => (
+          <g key={i} onMouseEnter={() => setHovIdx(i)}>
+            <rect x={px(i) - xStep / 2} y={padT} width={xStep} height={chartH} fill="transparent" />
+            {hovIdx === i && (
+              <>
+                <line x1={px(i)} y1={padT} x2={px(i)} y2={padT + chartH} stroke="#94a3b8" strokeWidth="1" strokeOpacity="0.4" />
+                <circle cx={px(i)} cy={py(d.before)} r="4" fill="#ef4444" stroke="white" strokeWidth="1.5" />
+                <circle cx={px(i)} cy={py(d.after)}  r="4" fill="#10b981" stroke="white" strokeWidth="1.5" />
+                <rect x={Math.min(px(i) - 42, W - padR - 88)} y={py(d.before) - 52} width={86} height={48} rx="5" fill="#1e293b" fillOpacity="0.95" />
+                <text x={Math.min(px(i) - 42, W - padR - 88) + 8} y={py(d.before) - 37} fontSize="10" fill="#94a3b8" fontWeight="600">{d.hour}</text>
+                <text x={Math.min(px(i) - 42, W - padR - 88) + 8} y={py(d.before) - 24} fontSize="9" fill="#ef4444">Before: {d.before}%</text>
+                <text x={Math.min(px(i) - 42, W - padR - 88) + 8} y={py(d.before) - 12} fontSize="9" fill="#10b981">After:   {d.after}%</text>
+              </>
+            )}
+          </g>
+        ))}
+      </svg>
+      <div className="flex items-center gap-4 mt-1 px-1">
+        <div className="flex items-center gap-1.5">
+          <div className="w-6 border-t-2 border-dashed border-red-400" />
+          <span className="text-[11px] text-slate-500 dark:text-slate-400">Before fix (504 rate %)</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-6 h-0.5 bg-emerald-500 rounded" />
+          <span className="text-[11px] text-slate-500 dark:text-slate-400">After fix (504 rate %)</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ApiStatusPanel() {
+  const [timeoutBudgets, setTimeoutBudgets] = useState({ read: 5000, write: 12000, report: 30000 });
+  const [retryEnabled, setRetryEnabled]   = useState(true);
+  const [circuitBreaker, setCircuitBreaker] = useState(true);
+  const [savedBudgets, setSavedBudgets]   = useState(false);
+
+  function saveBudgets() { setSavedBudgets(true); setTimeout(() => setSavedBudgets(false), 2500); }
+
+  return (
+    <div className="space-y-6">
+      {/* KPIs */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="rounded-2xl border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/5 p-5 flex items-start gap-4 shadow-sm">
+          <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center shrink-0">
+            <Server size={18} className="text-emerald-600 dark:text-emerald-400" />
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">504 Error Rate</p>
+            <p className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">0.3%</p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">↓ from 21% avg</p>
+          </div>
+        </div>
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 flex items-start gap-4 shadow-sm">
+          <div className="w-10 h-10 rounded-xl bg-sky-100 dark:bg-sky-500/20 flex items-center justify-center shrink-0">
+            <Timer size={18} className="text-sky-600 dark:text-sky-400" />
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Median Latency</p>
+            <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-0.5">82 ms</p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">p50 · all endpoints</p>
+          </div>
+        </div>
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 flex items-start gap-4 shadow-sm">
+          <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-500/20 flex items-center justify-center shrink-0">
+            <Gauge size={18} className="text-violet-600 dark:text-violet-400" />
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">p95 Latency</p>
+            <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-0.5">456 ms</p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">↓ 38% vs pre-fix</p>
+          </div>
+        </div>
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 flex items-start gap-4 shadow-sm">
+          <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center shrink-0">
+            <TrendingUp size={18} className="text-amber-600 dark:text-amber-400" />
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">API Uptime</p>
+            <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-0.5">99.97%</p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Rolling 30 days</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Chart */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white">504 Error Rate — Before vs After Fix</h2>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">All endpoints · 24-hour window · LUMI-504</p>
+          </div>
+          <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/15 px-2.5 py-1 rounded-full">↓ 98.6% improvement</span>
+        </div>
+        <ErrorRateChart />
+      </div>
+
+      {/* Endpoint table */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
+        <div className="flex items-center gap-2 mb-4">
+          <Server size={15} className="text-slate-400" />
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white">Endpoint Health</h2>
+        </div>
+        <div className="overflow-x-auto -mx-1">
+          <table className="w-full text-xs min-w-[520px]">
+            <thead>
+              <tr className="border-b border-slate-100 dark:border-slate-800">
+                <th className="text-left font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Endpoint</th>
+                <th className="text-left font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1 w-12">Method</th>
+                <th className="text-right font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">p50</th>
+                <th className="text-right font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">p95</th>
+                <th className="text-right font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">p99</th>
+                <th className="text-right font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">504 rate</th>
+                <th className="text-right font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {API_ENDPOINTS.map(ep => (
+                <tr key={ep.id} className="border-b border-slate-50 dark:border-slate-800/60 last:border-0">
+                  <td className="py-2.5 px-1 text-slate-700 dark:text-slate-300 font-mono">{ep.path}</td>
+                  <td className="py-2.5 px-1">
+                    <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded",
+                      ep.method === "GET"
+                        ? "bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-400"
+                        : "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400"
+                    )}>{ep.method}</span>
+                  </td>
+                  <td className="py-2.5 px-1 text-right text-slate-600 dark:text-slate-400 tabular-nums">{ep.p50}ms</td>
+                  <td className="py-2.5 px-1 text-right text-slate-600 dark:text-slate-400 tabular-nums">{ep.p95}ms</td>
+                  <td className="py-2.5 px-1 text-right text-slate-600 dark:text-slate-400 tabular-nums">{ep.p99}ms</td>
+                  <td className="py-2.5 px-1 text-right tabular-nums text-emerald-600 dark:text-emerald-400 font-semibold">{ep.rate504.toFixed(1)}%</td>
+                  <td className="py-2.5 px-1 text-right">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/15 px-1.5 py-0.5 rounded-full">
+                      <CheckCircle2 size={9} /> healthy
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Timeout budgets */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-5">
+          <Timer size={15} className="text-amber-500" />
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Timeout Budgets</h3>
+          <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400">LUMI-504 fix</span>
+        </div>
+        <div className="space-y-5">
+          {([
+            { key: "read",   label: "Read endpoints",    sub: "GET /api/v2/*",             min: 1000,  max: 15000 },
+            { key: "write",  label: "Write endpoints",   sub: "POST/PATCH /api/v2/*",       min: 5000,  max: 30000 },
+            { key: "report", label: "Report generation", sub: "POST /api/v2/energy/report", min: 10000, max: 60000 },
+          ] as const).map(row => (
+            <div key={row.key}>
+              <div className="flex items-center justify-between mb-1.5">
+                <div>
+                  <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{row.label}</span>
+                  <span className="ml-2 text-xs text-slate-400 font-mono">{row.sub}</span>
+                </div>
+                <span className="text-sm font-bold text-amber-500 tabular-nums">{(timeoutBudgets[row.key] / 1000).toFixed(0)} s</span>
+              </div>
+              <input type="range" min={row.min} max={row.max} step={1000} value={timeoutBudgets[row.key]}
+                onChange={e => setTimeoutBudgets(prev => ({ ...prev, [row.key]: Number(e.target.value) }))}
+                className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-amber-400"
+              />
+              <div className="flex justify-between text-[10px] text-slate-400 mt-0.5">
+                <span>{row.min / 1000}s</span><span>{row.max / 1000}s</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-5 pt-5 border-t border-slate-100 dark:border-slate-800 space-y-3">
+          {([
+            { label: "Retry on timeout",  sub: "Safe GET/idempotent ops only · max 2 retries",    val: retryEnabled,   set: setRetryEnabled   },
+            { label: "Circuit breaker",   sub: "Open after 5 consecutive 504s · 30s recovery",    val: circuitBreaker, set: setCircuitBreaker },
+          ] as const).map(row => (
+            <div key={row.label} className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{row.label}</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500">{row.sub}</p>
+              </div>
+              <button onClick={() => row.set(!row.val)} className={cn("transition-colors shrink-0 ml-4", row.val ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>
+                {row.val ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+              </button>
+            </div>
+          ))}
+        </div>
+        <button onClick={saveBudgets}
+          className={cn("mt-5 px-5 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center gap-2",
+            savedBudgets ? "bg-green-500 text-white" : "bg-amber-500 hover:bg-amber-400 text-white shadow hover:shadow-amber-400/30"
+          )}
+        >
+          {savedBudgets ? <><CheckCircle2 size={15} /> Saved!</> : "Apply changes"}
+        </button>
+      </div>
+
+      {/* Incident log */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-4">
+          <Clock size={15} className="text-slate-400" />
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Recent Incidents</h3>
+        </div>
+        <div className="space-y-2">
+          {API_INCIDENTS.map(inc => (
+            <div key={inc.id} className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+              {inc.ok ? <CheckCircle2 size={13} className="text-emerald-500 shrink-0 mt-0.5" /> : <AlertCircle size={13} className="text-red-500 shrink-0 mt-0.5" />}
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 font-mono">{inc.endpoint}</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{inc.msg}</p>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="text-[11px] text-slate-400">{inc.ts}</p>
+                <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-full",
+                  inc.ok ? "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-red-50 dark:bg-red-500/15 text-red-600 dark:text-red-400"
+                )}>resolved</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 const DEFAULT_BRANDING: BrandingConfig = {
@@ -1140,6 +1437,7 @@ export default function DashboardPage() {
     { id: "alerts",       label: "Alerts",       icon: <Bell size={17} />, badge: alertList.filter(a => a.severity !== "info").length },
     { id: "schedules",    label: "Schedules",    icon: <Calendar size={17} /> },
     { id: "reports",      label: "Reports",      icon: <BarChart3 size={17} /> },
+    { id: "api-status",   label: "API Status",   icon: <Server size={17} /> },
     { id: "integrations", label: "Integrations", icon: <Plug size={17} /> },
     { id: "settings",     label: "Settings",     icon: <Settings size={17} /> },
   ];
@@ -1632,6 +1930,9 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
+
+          {/* ── API STATUS ── */}
+          {tab === "api-status" && <ApiStatusPanel />}
 
           {/* ── INTEGRATIONS ── */}
           {tab === "integrations" && <IntegrationsPanel />}
