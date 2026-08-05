@@ -10,6 +10,8 @@ import {
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
   Palette, Upload, Eye, Plug, RefreshCw, ArrowLeftRight,
   Database, Globe, Link2, AlertCircle, Clock,
+  KeyRound, Copy, Lock, UserCheck, Server, ShieldAlert,
+  RotateCcw, UserX, UserPlus, Network, EyeOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -302,6 +304,46 @@ function SettingsPanel({
   const [brandingSaved, setBrandingSaved] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // SSO / SCIM state
+  const [ssoEnabled, setSsoEnabled]           = useState(false);
+  const [ssoMode, setSsoMode]                 = useState<"optional" | "enforced">("optional");
+  const [ssoIdpUrl, setSsoIdpUrl]             = useState("");
+  const [ssoEntityId, setSsoEntityId]         = useState("");
+  const [ssoCert, setSsoCert]                 = useState("");
+  const [ssoDomain, setSsoDomain]             = useState("acme.com");
+  const [ssoSaved, setSsoSaved]               = useState(false);
+  const [ssoCopied, setSsoCopied]             = useState(false);
+  const [breakGlassActive, setBreakGlassActive] = useState(false);
+  const [scimEnabled, setScimEnabled]         = useState(false);
+  const [scimTokenVisible, setScimTokenVisible] = useState(false);
+  const [scimTokenCopied, setScimTokenCopied] = useState(false);
+  const [scimTokenRotating, setScimTokenRotating] = useState(false);
+  const [scimToken, setScimToken]             = useState("sct_prod_7f3kQmN2xLpR9vWsY8aZbH4cDgEj5nKo");
+  const [scimEpCopied, setScimEpCopied]       = useState(false);
+
+  const SCIM_ENDPOINT = "https://api.lumiglow.io/scim/v2";
+  const ACS_ENDPOINT  = "https://app.lumiglow.io/auth/saml/acs";
+  const SP_ENTITY_ID  = "https://app.lumiglow.io/auth/saml/metadata";
+
+  function copyText(text: string, setter: (v: boolean) => void) {
+    navigator.clipboard?.writeText(text).catch(() => {});
+    setter(true);
+    setTimeout(() => setter(false), 2000);
+  }
+
+  function saveSso() {
+    setSsoSaved(true);
+    setTimeout(() => setSsoSaved(false), 2000);
+  }
+
+  function rotateScimToken() {
+    setScimTokenRotating(true);
+    setTimeout(() => {
+      setScimToken("sct_prod_" + Math.random().toString(36).slice(2, 34));
+      setScimTokenRotating(false);
+    }, 1400);
+  }
+
   function save() {
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -567,6 +609,271 @@ function SettingsPanel({
         >
           {brandingSaved ? <><CheckCircle2 size={15} /> Branding applied!</> : <><Palette size={15} /> Apply branding</>}
         </button>
+      </div>
+
+      {/* ── Enterprise SSO ──────────────────────────────────────────────────── */}
+      <div className="rounded-2xl border border-indigo-200 dark:border-indigo-500/30 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-1">
+          <ShieldCheck size={16} className="text-indigo-500" />
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Enterprise SSO (SAML 2.0)</h3>
+          <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-400">Enterprise</span>
+        </div>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-5">Connect your identity provider to enable SAML-based single sign-on for your organisation.</p>
+
+        {/* Enable toggle */}
+        <div className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800 mb-5">
+          <div>
+            <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">Enable SSO</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">Allow users to sign in via your IdP</p>
+          </div>
+          <button onClick={() => setSsoEnabled(!ssoEnabled)} className={cn("transition-colors", ssoEnabled ? "text-indigo-500" : "text-slate-300 dark:text-slate-600")}>
+            {ssoEnabled ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+          </button>
+        </div>
+
+        {ssoEnabled && (
+          <div className="space-y-5">
+            {/* SP Endpoints (read-only) */}
+            <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 p-4 space-y-3">
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Your Service Provider (SP) details</p>
+              {[
+                { label: "ACS URL (Reply URL)", value: ACS_ENDPOINT, copied: ssoCopied, onCopy: () => copyText(ACS_ENDPOINT, setSsoCopied) },
+                { label: "SP Entity ID (Audience URI)", value: SP_ENTITY_ID, copied: false, onCopy: () => {} },
+              ].map(row => (
+                <div key={row.label}>
+                  <p className="text-[11px] text-slate-400 mb-1">{row.label}</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-lg text-slate-700 dark:text-slate-300 truncate font-mono">{row.value}</code>
+                    <button onClick={row.onCopy} className="shrink-0 text-slate-400 hover:text-indigo-500 transition-colors">
+                      {row.copied ? <CheckCircle2 size={14} className="text-green-500" /> : <Copy size={14} />}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* IdP Configuration */}
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Identity Provider (IdP) configuration</p>
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">IdP SSO URL</label>
+                <input
+                  value={ssoIdpUrl}
+                  onChange={e => setSsoIdpUrl(e.target.value)}
+                  placeholder="https://your-idp.okta.com/app/xxx/sso/saml"
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-slate-400"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">IdP Entity ID / Issuer</label>
+                <input
+                  value={ssoEntityId}
+                  onChange={e => setSsoEntityId(e.target.value)}
+                  placeholder="http://www.okta.com/exkXXXXXXXX"
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-slate-400"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">X.509 Certificate (PEM)</label>
+                <textarea
+                  value={ssoCert}
+                  onChange={e => setSsoCert(e.target.value)}
+                  placeholder={"-----BEGIN CERTIFICATE-----\nMIID…\n-----END CERTIFICATE-----"}
+                  rows={4}
+                  className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-slate-400 resize-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Verified email domain</label>
+                <input
+                  value={ssoDomain}
+                  onChange={e => setSsoDomain(e.target.value)}
+                  placeholder="acme.com"
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400 placeholder-slate-400"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">Users with this email domain will be routed to SSO login.</p>
+              </div>
+            </div>
+
+            {/* Enforcement mode */}
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">SSO enforcement</p>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { value: "optional", label: "Optional", desc: "Users can also sign in with password" },
+                  { value: "enforced", label: "Enforced", desc: "Password login disabled for org members" },
+                ] as const).map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setSsoMode(opt.value)}
+                    className={cn(
+                      "text-left p-3 rounded-xl border-2 transition-all",
+                      ssoMode === opt.value
+                        ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10"
+                        : "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
+                    )}
+                  >
+                    <div className="flex items-center gap-1.5 mb-1">
+                      {opt.value === "enforced" ? <Lock size={12} className={ssoMode === "enforced" ? "text-indigo-500" : "text-slate-400"} /> : <ShieldCheck size={12} className={ssoMode === "optional" ? "text-indigo-500" : "text-slate-400"} />}
+                      <span className={cn("text-xs font-semibold", ssoMode === opt.value ? "text-indigo-600 dark:text-indigo-400" : "text-slate-700 dark:text-slate-300")}>{opt.label}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">{opt.desc}</p>
+                  </button>
+                ))}
+              </div>
+
+              {ssoMode === "enforced" && (
+                <div className="rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <ShieldAlert size={13} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                    <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">Break-glass admin access</p>
+                  </div>
+                  <p className="text-[11px] text-amber-600 dark:text-amber-500 mb-2">Generate a time-limited bypass link for emergency admin access when SSO is unavailable.</p>
+                  <button
+                    onClick={() => setBreakGlassActive(!breakGlassActive)}
+                    className={cn(
+                      "text-xs font-semibold px-3 py-1.5 rounded-lg transition-all",
+                      breakGlassActive
+                        ? "bg-green-500 text-white"
+                        : "bg-amber-500 hover:bg-amber-400 text-white"
+                    )}
+                  >
+                    {breakGlassActive ? "✓ Bypass link active (expires in 15 min)" : "Generate bypass link"}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={saveSso}
+              className={cn(
+                "px-5 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center gap-2",
+                ssoSaved ? "bg-green-500 text-white" : "bg-indigo-600 hover:bg-indigo-500 text-white shadow"
+              )}
+            >
+              {ssoSaved ? <><CheckCircle2 size={15} /> SSO configuration saved</> : <><KeyRound size={15} /> Save SSO configuration</>}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ── SCIM Provisioning ────────────────────────────────────────────────── */}
+      <div className="rounded-2xl border border-violet-200 dark:border-violet-500/30 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-1">
+          <Network size={16} className="text-violet-500" />
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">SCIM 2.0 Provisioning</h3>
+          <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-400">Enterprise</span>
+        </div>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-5">Automate user and group provisioning/deprovisioning via your IdP's SCIM connector.</p>
+
+        {/* Enable toggle */}
+        <div className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800 mb-5">
+          <div>
+            <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">Enable SCIM provisioning</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">Sync users and groups from Okta, Azure AD, or any SCIM 2.0 client</p>
+          </div>
+          <button onClick={() => setScimEnabled(!scimEnabled)} className={cn("transition-colors", scimEnabled ? "text-violet-500" : "text-slate-300 dark:text-slate-600")}>
+            {scimEnabled ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+          </button>
+        </div>
+
+        {scimEnabled && (
+          <div className="space-y-5">
+            {/* SCIM endpoint */}
+            <div>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">SCIM connector settings</p>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">SCIM 2.0 base URL</label>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 font-mono truncate">{SCIM_ENDPOINT}</code>
+                    <button onClick={() => copyText(SCIM_ENDPOINT, setScimEpCopied)} className="shrink-0 text-slate-400 hover:text-violet-500 transition-colors">
+                      {scimEpCopied ? <CheckCircle2 size={14} className="text-green-500" /> : <Copy size={14} />}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Bearer token</label>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 font-mono truncate">
+                      {scimTokenVisible ? scimToken : "••••••••••••••••••••••••••••••••"}
+                    </code>
+                    <button onClick={() => setScimTokenVisible(!scimTokenVisible)} className="shrink-0 text-slate-400 hover:text-violet-500 transition-colors">
+                      {scimTokenVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                    <button onClick={() => copyText(scimToken, setScimTokenCopied)} className="shrink-0 text-slate-400 hover:text-violet-500 transition-colors">
+                      {scimTokenCopied ? <CheckCircle2 size={14} className="text-green-500" /> : <Copy size={14} />}
+                    </button>
+                    <button onClick={rotateScimToken} className={cn("shrink-0 text-slate-400 hover:text-violet-500 transition-colors", scimTokenRotating && "animate-spin")} title="Rotate token">
+                      <RotateCcw size={14} />
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1">Paste this token in your IdP's SCIM connector. Rotating will invalidate the current token.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Provisioning options */}
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Provisioning behaviour</p>
+              {[
+                { icon: <UserPlus size={13} />, label: "Provision new users", sub: "Create LumiGlow accounts for new IdP users", color: "text-green-500" },
+                { icon: <UserX size={13} />,   label: "Deprovision removed users", sub: "Disable accounts when removed from IdP", color: "text-red-500" },
+                { icon: <UserCheck size={13} />, label: "Sync group memberships", sub: "Map SCIM groups to LumiGlow roles", color: "text-violet-500" },
+              ].map(row => (
+                <div key={row.label} className="flex items-start gap-3 py-2 border-b border-slate-100 dark:border-slate-800 last:border-0 last:pb-0">
+                  <span className={cn("mt-0.5 shrink-0", row.color)}>{row.icon}</span>
+                  <div>
+                    <p className="text-xs font-medium text-slate-800 dark:text-slate-200">{row.label}</p>
+                    <p className="text-[11px] text-slate-400">{row.sub}</p>
+                  </div>
+                  <CheckCircle2 size={14} className="ml-auto mt-0.5 shrink-0 text-green-500" />
+                </div>
+              ))}
+            </div>
+
+            {/* Role mapping */}
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">Group → role mapping</p>
+              <div className="space-y-2">
+                {[
+                  { group: "LumiGlow Admins",  role: "Admin",         color: "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400" },
+                  { group: "LumiGlow Members", role: "Member",        color: "bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-400" },
+                  { group: "LumiGlow Viewers", role: "Read-only",     color: "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400" },
+                ].map(m => (
+                  <div key={m.group} className="flex items-center gap-3 text-xs">
+                    <span className="flex-1 text-slate-700 dark:text-slate-300 font-medium truncate">{m.group}</span>
+                    <ArrowLeftRight size={12} className="text-slate-400 shrink-0" />
+                    <span className={cn("px-2 py-0.5 rounded-full text-[11px] font-semibold shrink-0", m.color)}>{m.role}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-3">SCIM-managed users will have a <span className="font-semibold text-violet-500">SCIM</span> badge. Their role and active state are controlled by the IdP and cannot be overridden in-app.</p>
+            </div>
+
+            {/* Sync status */}
+            <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 p-4">
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">Last sync summary</p>
+              <div className="grid grid-cols-3 gap-3 mb-3">
+                {[
+                  { label: "Users synced",  value: "47",  icon: <UserCheck size={14} />, color: "text-violet-500" },
+                  { label: "Provisioned",   value: "+3",  icon: <UserPlus size={14} />,  color: "text-green-500" },
+                  { label: "Deprovisioned", value: "1",   icon: <UserX size={14} />,     color: "text-red-500"   },
+                ].map(s => (
+                  <div key={s.label} className="text-center">
+                    <div className={cn("mx-auto w-8 h-8 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center mb-1", s.color)}>{s.icon}</div>
+                    <p className="text-sm font-bold text-slate-900 dark:text-white">{s.value}</p>
+                    <p className="text-[10px] text-slate-400">{s.label}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                <Clock size={11} className="shrink-0" />
+                Last sync: Today at 14:35 UTC · Next: in ~8 min
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <button

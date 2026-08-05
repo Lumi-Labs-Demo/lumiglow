@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Zap, Eye, EyeOff, CheckCircle2, AlertCircle, ArrowRight, Shield, Loader2 } from "lucide-react";
+import { Zap, Eye, EyeOff, CheckCircle2, AlertCircle, ArrowRight, Shield, Loader2, KeyRound, Building2, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
 
@@ -153,6 +153,106 @@ function MicrosoftOAuthModal({
   );
 }
 
+type SamlStep = "idle" | "detecting" | "redirecting" | "validating" | "success";
+
+// SAML SSO detection — simulates domain-based IdP routing
+function SamlSsoModal({ step, domain, onClose }: { step: SamlStep; domain: string; onClose: () => void }) {
+  if (step === "idle") return null;
+
+  const idpName = domain.includes("microsoft") || domain.includes("outlook") ? "Azure AD / Entra ID" :
+                  domain.includes("google") ? "Google Workspace" : "Okta";
+  const acsUrl = "https://app.lumiglow.io/auth/saml/acs";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div className="relative z-10 w-full max-w-sm mx-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-4 flex items-center gap-3">
+          <KeyRound size={18} className="text-white" />
+          <span className="text-white font-semibold text-sm">SAML 2.0 SSO</span>
+          <span className="ml-auto text-xs text-indigo-200">{domain}</span>
+        </div>
+        <div className="px-6 py-8 text-center">
+          {step === "detecting" && (
+            <div className="space-y-4">
+              <Loader2 className="w-10 h-10 mx-auto text-indigo-500 animate-spin" />
+              <div>
+                <p className="font-semibold text-slate-900 dark:text-white">Detecting SSO provider</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Looking up IdP configuration for <strong>{domain}</strong>…</p>
+              </div>
+              <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 rounded-xl p-3 text-left">
+                <Shield size={13} className="text-indigo-400 shrink-0" />
+                <p className="text-xs text-slate-500 dark:text-slate-400">Domain verified · SAML metadata loaded · Initiating SP-initiated login</p>
+              </div>
+            </div>
+          )}
+          {step === "redirecting" && (
+            <div className="space-y-4">
+              <Loader2 className="w-10 h-10 mx-auto text-indigo-500 animate-spin" />
+              <div>
+                <p className="font-semibold text-slate-900 dark:text-white">Redirecting to {idpName}</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Sending SAML AuthnRequest…</p>
+              </div>
+              <div className="rounded-xl bg-slate-50 dark:bg-slate-800 p-3 space-y-1.5 text-left">
+                {[
+                  { label: "SP Entity ID", value: "https://app.lumiglow.io/auth/saml/metadata" },
+                  { label: "ACS URL",      value: acsUrl },
+                  { label: "Binding",      value: "HTTP-POST" },
+                ].map(row => (
+                  <div key={row.label} className="flex gap-2 text-xs">
+                    <span className="text-slate-400 shrink-0 w-20">{row.label}</span>
+                    <span className="text-slate-600 dark:text-slate-300 font-mono truncate">{row.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {step === "validating" && (
+            <div className="space-y-4">
+              <Loader2 className="w-10 h-10 mx-auto text-indigo-500 animate-spin" />
+              <p className="font-semibold text-slate-900 dark:text-white">Validating SAML assertion</p>
+              <div className="flex flex-col gap-2 text-left">
+                {[
+                  { label: "Signature verified",        done: true },
+                  { label: "Audience restriction matched", done: true },
+                  { label: "Assertion not expired",     done: true },
+                  { label: "Mapping user account…",     done: false },
+                ].map(item => (
+                  <div key={item.label} className="flex items-center gap-2">
+                    {item.done ? <CheckCircle2 size={13} className="text-green-500 shrink-0" /> : <Loader2 size={13} className="text-indigo-500 animate-spin shrink-0" />}
+                    <span className="text-xs text-slate-600 dark:text-slate-400">{item.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {step === "success" && (
+            <div className="space-y-4">
+              <div className="w-14 h-14 mx-auto rounded-full bg-green-100 dark:bg-green-500/20 flex items-center justify-center">
+                <CheckCircle2 className="w-8 h-8 text-green-500" />
+              </div>
+              <div>
+                <p className="font-semibold text-slate-900 dark:text-white">Signed in via SSO</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Welcome back, Jordan Davis</p>
+                <p className="text-xs text-slate-400 mt-0.5">jordan@{domain} · {idpName}</p>
+              </div>
+              <div className="flex items-center gap-2 bg-green-50 dark:bg-green-500/10 rounded-xl p-3">
+                <Shield size={13} className="text-green-500 shrink-0" />
+                <p className="text-xs text-green-700 dark:text-green-400 text-left">SAML assertion accepted · Session created · Redirecting…</p>
+              </div>
+              <div className="flex items-center justify-center gap-1.5">
+                <Loader2 size={12} className="animate-spin text-slate-400" />
+                <span className="text-xs text-slate-400">Redirecting to dashboard…</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -160,6 +260,10 @@ export default function LoginPage() {
   const [showPw, setShowPw] = useState(false);
   const [oauthStep, setOauthStep] = useState<Step>("idle");
   const [emailError, setEmailError] = useState("");
+  const [samlStep, setSamlStep] = useState<SamlStep>("idle");
+  const [samlEmail, setSamlEmail] = useState("");
+  const [samlEmailError, setSamlEmailError] = useState("");
+  const [showSsoPanel, setShowSsoPanel] = useState(false);
 
   // Microsoft OAuth demo flow
   function handleMicrosoftSignIn() {
@@ -167,6 +271,22 @@ export default function LoginPage() {
     setTimeout(() => setOauthStep("authenticating"), 1800);
     setTimeout(() => setOauthStep("success"), 3600);
     setTimeout(() => router.push("/dashboard"), 5200);
+  }
+
+  // SAML SSO domain routing
+  function handleSamlSso(e: React.FormEvent) {
+    e.preventDefault();
+    const domain = samlEmail.split("@")[1];
+    if (!samlEmail.includes("@") || !domain) {
+      setSamlEmailError("Please enter a valid work email address.");
+      return;
+    }
+    setSamlEmailError("");
+    setSamlStep("detecting");
+    setTimeout(() => setSamlStep("redirecting"), 1400);
+    setTimeout(() => setSamlStep("validating"), 2800);
+    setTimeout(() => setSamlStep("success"), 4400);
+    setTimeout(() => router.push("/dashboard"), 6000);
   }
 
   function handleEmailSignIn(e: React.FormEvent) {
@@ -179,9 +299,12 @@ export default function LoginPage() {
     router.push("/dashboard");
   }
 
+  const samlDomain = samlEmail.includes("@") ? samlEmail.split("@")[1] : "acme.com";
+
   return (
     <>
       <MicrosoftOAuthModal step={oauthStep} onClose={() => setOauthStep("idle")} />
+      <SamlSsoModal step={samlStep} domain={samlDomain} onClose={() => setSamlStep("idle")} />
 
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-amber-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex flex-col">
         {/* Top bar */}
@@ -210,7 +333,7 @@ export default function LoginPage() {
               </div>
 
               {/* SSO Buttons */}
-              <div className="space-y-3 mb-6">
+              <div className="space-y-3 mb-4">
                 <button
                   onClick={handleMicrosoftSignIn}
                   className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700/60 hover:border-slate-300 dark:hover:border-slate-600 transition-all shadow-sm hover:shadow group"
@@ -228,7 +351,61 @@ export default function LoginPage() {
                   Continue with Google
                   <ArrowRight size={14} className="ml-auto text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors" />
                 </button>
+
+                {/* Enterprise SAML SSO */}
+                <button
+                  onClick={() => setShowSsoPanel(!showSsoPanel)}
+                  className={cn(
+                    "w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border text-sm font-semibold transition-all shadow-sm hover:shadow group",
+                    showSsoPanel
+                      ? "border-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300"
+                      : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 hover:border-slate-300"
+                  )}
+                >
+                  <KeyRound size={16} className={showSsoPanel ? "text-indigo-500" : "text-slate-500"} />
+                  Sign in with SSO
+                  <span className="ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400">Enterprise</span>
+                </button>
               </div>
+
+              {/* SAML SSO Panel */}
+              {showSsoPanel && (
+                <div className="mb-5 rounded-xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/50 dark:bg-indigo-500/5 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Building2 size={13} className="text-indigo-500" />
+                    <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-400">SAML 2.0 — Domain-based routing</p>
+                  </div>
+                  <form onSubmit={handleSamlSso} className="space-y-3">
+                    <div>
+                      <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Work email address</label>
+                      <input
+                        type="email"
+                        value={samlEmail}
+                        onChange={(e) => { setSamlEmail(e.target.value); setSamlEmailError(""); }}
+                        placeholder="you@yourcompany.com"
+                        className={cn(
+                          "w-full px-3.5 py-2.5 text-sm rounded-xl border bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 transition-all",
+                          samlEmailError
+                            ? "border-red-400 focus:ring-red-400/30"
+                            : "border-indigo-200 dark:border-indigo-500/30 focus:ring-indigo-400/40 focus:border-indigo-400"
+                        )}
+                      />
+                      {samlEmailError && (
+                        <p className="text-xs text-red-500 mt-1.5 flex items-center gap-1">
+                          <AlertCircle size={11} /> {samlEmailError}
+                        </p>
+                      )}
+                      <p className="text-[11px] text-slate-400 mt-1.5">We&apos;ll detect your organisation&apos;s IdP from the email domain and redirect you via SAML.</p>
+                    </div>
+                    <button
+                      type="submit"
+                      className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl transition-all text-sm flex items-center justify-center gap-2"
+                    >
+                      Continue with SSO <ChevronRight size={15} />
+                    </button>
+                  </form>
+                </div>
+              )}
 
               {/* Divider */}
               <div className="flex items-center gap-3 mb-6">
@@ -313,7 +490,7 @@ export default function LoginPage() {
             <div className="flex items-center justify-center gap-2 mt-5">
               <Shield size={12} className="text-slate-400" />
               <p className="text-xs text-slate-400">
-                Protected by OAuth 2.0 · SOC 2 Type II · GDPR compliant
+                SAML 2.0 · OAuth 2.0 · SOC 2 Type II · GDPR compliant
               </p>
             </div>
           </div>
