@@ -9,7 +9,7 @@ import {
   TrendingDown, Activity, Users, ShieldCheck, Search,
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
   Palette, Upload, Eye, Plug, RefreshCw, ArrowLeftRight,
-  Database, Globe, Link2, AlertCircle, Clock,
+  Database, Globe, Link2, AlertCircle, Clock, Download, FileText, Filter,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -280,6 +280,195 @@ const reports = [
   { id: "r4", name: "Zone Uptime Report",     scope: "West Campus",   generated: "Apr 28, 2025",  size: "56 KB"  },
   { id: "r5", name: "Firmware Inventory",     scope: "All buildings", generated: "Apr 25, 2025",  size: "34 KB"  },
 ];
+
+// ─── Log data ─────────────────────────────────────────────────────────────────
+
+type LogLevel = "info" | "warning" | "error" | "debug";
+
+interface LogEntry {
+  id: string;
+  ts: string;
+  level: LogLevel;
+  source: string;
+  message: string;
+  user?: string;
+}
+
+const LOG_ENTRIES: LogEntry[] = [
+  { id: "l01", ts: "2025-05-20 14:32:07", level: "info",    source: "auth",       message: "User login successful",                     user: "jordan@acme.com"     },
+  { id: "l02", ts: "2025-05-20 14:28:44", level: "warning", source: "zone-ctrl",  message: "Zone brightness capped at 80% (policy)",     user: "system"              },
+  { id: "l03", ts: "2025-05-20 14:15:02", level: "error",   source: "export",     message: "Log export failed: permission denied",        user: "jordan@acme.com"     },
+  { id: "l04", ts: "2025-05-20 13:58:31", level: "info",    source: "schedule",   message: "Schedule 'Business Hours' activated",         user: "system"              },
+  { id: "l05", ts: "2025-05-20 13:42:17", level: "info",    source: "zone-ctrl",  message: "Zone 'Open Office A' turned off",             user: "alex@acme.com"       },
+  { id: "l06", ts: "2025-05-20 13:31:09", level: "debug",   source: "sensor",     message: "Occupancy sensor heartbeat OK",               user: "system"              },
+  { id: "l07", ts: "2025-05-20 13:20:55", level: "warning", source: "firmware",   message: "Device fw-4421 firmware update pending",      user: "system"              },
+  { id: "l08", ts: "2025-05-20 12:50:23", level: "info",    source: "auth",       message: "API token refreshed",                        user: "api-service"         },
+  { id: "l09", ts: "2025-05-20 12:44:11", level: "error",   source: "zone-ctrl",  message: "Zone 'Server Room' failed to respond",        user: "system"              },
+  { id: "l10", ts: "2025-05-20 12:33:00", level: "info",    source: "schedule",   message: "Schedule 'Late Night Min' deactivated",       user: "system"              },
+  { id: "l11", ts: "2025-05-20 12:18:47", level: "info",    source: "auth",       message: "User login successful",                       user: "alex@acme.com"       },
+  { id: "l12", ts: "2025-05-20 11:59:03", level: "debug",   source: "export",     message: "Export queue empty, idle",                    user: "system"              },
+  { id: "l13", ts: "2025-05-20 11:41:29", level: "info",    source: "zone-ctrl",  message: "Bulk brightness update: 12 zones to 60%",     user: "jordan@acme.com"     },
+  { id: "l14", ts: "2025-05-20 11:25:16", level: "warning", source: "network",    message: "Gateway latency spike: 340 ms",               user: "system"              },
+  { id: "l15", ts: "2025-05-20 11:08:54", level: "info",    source: "auth",       message: "2FA verification passed",                     user: "jordan@acme.com"     },
+];
+
+type LogFormat = "csv" | "json" | "txt";
+
+function LogExportPanel() {
+  const [levelFilter, setLevelFilter] = useState<LogLevel | "all">("all");
+  const [format, setFormat]           = useState<LogFormat>("csv");
+  const [exporting, setExporting]     = useState(false);
+  const [exported, setExported]       = useState(false);
+
+  const filtered = LOG_ENTRIES.filter(l => levelFilter === "all" || l.level === levelFilter);
+
+  function buildBlob(): Blob {
+    if (format === "json") {
+      return new Blob([JSON.stringify(filtered, null, 2)], { type: "application/json" });
+    }
+    if (format === "csv") {
+      const header = "id,timestamp,level,source,message,user";
+      const rows = filtered.map(l =>
+        [l.id, l.ts, l.level, l.source, `"${l.message.replace(/"/g, '""')}"`, l.user ?? ""].join(",")
+      );
+      return new Blob([[header, ...rows].join("\n")], { type: "text/csv" });
+    }
+    // txt
+    const lines = filtered.map(l => `[${l.ts}] [${l.level.toUpperCase().padEnd(7)}] ${l.source}: ${l.message}${l.user ? ` (${l.user})` : ""}`);
+    return new Blob([lines.join("\n")], { type: "text/plain" });
+  }
+
+  function handleExport() {
+    setExporting(true);
+    setTimeout(() => {
+      const blob = buildBlob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `lumiglow-logs-${new Date().toISOString().slice(0, 10)}.${format}`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setExporting(false);
+      setExported(true);
+      setTimeout(() => setExported(false), 2500);
+    }, 900);
+  }
+
+  const levelColors: Record<LogLevel, string> = {
+    info:    "bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-400",
+    warning: "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
+    error:   "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400",
+    debug:   "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400",
+  };
+
+  return (
+    <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 shadow-sm overflow-hidden mt-6">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100 dark:border-slate-800">
+        <FileText size={16} className="text-amber-500 shrink-0" />
+        <div>
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white">System Log Export</h2>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Download audit &amp; system logs in your preferred format</p>
+        </div>
+        <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400">Fixed · LUMI-504</span>
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex-wrap">
+        {/* Level filter */}
+        <div className="flex items-center gap-1.5">
+          <Filter size={12} className="text-slate-400" />
+          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Level:</span>
+          <div className="flex gap-1">
+            {(["all", "error", "warning", "info", "debug"] as const).map(lvl => (
+              <button
+                key={lvl}
+                onClick={() => setLevelFilter(lvl)}
+                className={cn(
+                  "px-2 py-0.5 rounded-full text-[11px] font-semibold transition-colors capitalize",
+                  levelFilter === lvl
+                    ? "bg-amber-500 text-white"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+                )}
+              >
+                {lvl}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex-1" />
+
+        {/* Format selector */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Format:</span>
+          <select
+            value={format}
+            onChange={e => setFormat(e.target.value as LogFormat)}
+            className="px-2 py-1 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-400"
+          >
+            <option value="csv">CSV</option>
+            <option value="json">JSON</option>
+            <option value="txt">Plain text</option>
+          </select>
+        </div>
+
+        {/* Export button */}
+        <button
+          onClick={handleExport}
+          disabled={exporting || filtered.length === 0}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl transition-all disabled:opacity-60",
+            exported ? "bg-green-500 text-white" : "bg-amber-500 hover:bg-amber-400 text-white shadow"
+          )}
+        >
+          {exporting ? (
+            <><RefreshCw size={12} className="animate-spin" />Exporting…</>
+          ) : exported ? (
+            <><CheckCircle2 size={12} />Downloaded!</>
+          ) : (
+            <><Download size={12} />Export {filtered.length} logs</>
+          )}
+        </button>
+      </div>
+
+      {/* Log table */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs min-w-[560px]">
+          <thead>
+            <tr className="border-b border-slate-100 dark:border-slate-800">
+              <th className="text-left font-semibold text-slate-400 dark:text-slate-500 px-5 py-2.5">Timestamp</th>
+              <th className="text-left font-semibold text-slate-400 dark:text-slate-500 px-3 py-2.5 w-20">Level</th>
+              <th className="text-left font-semibold text-slate-400 dark:text-slate-500 px-3 py-2.5 w-24 hidden sm:table-cell">Source</th>
+              <th className="text-left font-semibold text-slate-400 dark:text-slate-500 px-3 py-2.5">Message</th>
+              <th className="text-left font-semibold text-slate-400 dark:text-slate-500 px-5 py-2.5 hidden md:table-cell">User</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((l, i) => (
+              <tr key={l.id} className={cn("border-b border-slate-50 dark:border-slate-800/60 last:border-0", i % 2 !== 0 && "bg-slate-50/50 dark:bg-slate-800/20")}>
+                <td className="px-5 py-2.5 font-mono text-slate-500 dark:text-slate-400 whitespace-nowrap">{l.ts}</td>
+                <td className="px-3 py-2.5">
+                  <span className={cn("px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase", levelColors[l.level])}>
+                    {l.level}
+                  </span>
+                </td>
+                <td className="px-3 py-2.5 text-slate-500 dark:text-slate-400 hidden sm:table-cell font-mono">{l.source}</td>
+                <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{l.message}</td>
+                <td className="px-5 py-2.5 text-slate-400 dark:text-slate-500 hidden md:table-cell">{l.user ?? "—"}</td>
+              </tr>
+            ))}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={5} className="text-center py-8 text-slate-400">No logs match the selected filter.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 // ─── Settings Panel ───────────────────────────────────────────────────────────
 
@@ -1630,6 +1819,8 @@ export default function DashboardPage() {
                   </tbody>
                 </table>
               </div>
+
+              <LogExportPanel />
             </div>
           )}
 
