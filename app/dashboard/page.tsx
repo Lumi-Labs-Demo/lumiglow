@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
 import {
   Zap, LayoutDashboard, Building2, Bell, Calendar,
@@ -10,6 +10,8 @@ import {
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
   Palette, Upload, Eye, Plug, RefreshCw, ArrowLeftRight,
   Database, Globe, Link2, AlertCircle, Clock,
+  LayoutGrid, Plus, GripVertical, EyeOff, ArrowUp, ArrowDown,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -24,7 +26,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings" | "integrations";
+type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings" | "integrations" | "my-dashboard";
 
 interface BrandingConfig {
   companyName: string;
@@ -1077,6 +1079,496 @@ const DEFAULT_BRANDING: BrandingConfig = {
   logoInitials: "LG",
 };
 
+// ─── Personalized Dashboard ───────────────────────────────────────────────────
+
+type WidgetId =
+  | "live-power"
+  | "zones-active"
+  | "buildings-online"
+  | "energy-savings"
+  | "energy-chart"
+  | "active-alerts"
+  | "schedules-summary"
+  | "recent-reports";
+
+interface WidgetMeta {
+  id: WidgetId;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  size: "sm" | "lg";
+}
+
+const WIDGET_CATALOG: WidgetMeta[] = [
+  { id: "live-power",        title: "Live Power Draw",      description: "Current kW usage across all buildings",         icon: <Activity size={15} />,    size: "sm" },
+  { id: "zones-active",      title: "Active Zones",         description: "Count of zones currently switched on",          icon: <Zap size={15} />,         size: "sm" },
+  { id: "buildings-online",  title: "Buildings Online",     description: "Number of connected buildings",                 icon: <Building2 size={15} />,   size: "sm" },
+  { id: "energy-savings",    title: "Energy Savings",       description: "Savings vs. last-year baseline",                icon: <TrendingDown size={15} />, size: "sm" },
+  { id: "energy-chart",      title: "Energy Usage Chart",   description: "24 h actual usage vs. baseline",               icon: <BarChart3 size={15} />,    size: "lg" },
+  { id: "active-alerts",     title: "Active Alerts",        description: "Summary of critical & warning alerts",          icon: <Bell size={15} />,        size: "lg" },
+  { id: "schedules-summary", title: "Schedules",            description: "Quick view of your active lighting schedules",  icon: <Calendar size={15} />,    size: "lg" },
+  { id: "recent-reports",    title: "Recent Reports",       description: "Latest generated reports at a glance",          icon: <BarChart3 size={15} />,    size: "lg" },
+];
+
+const DEFAULT_WIDGET_ORDER: WidgetId[] = [
+  "live-power",
+  "zones-active",
+  "buildings-online",
+  "energy-savings",
+  "energy-chart",
+  "active-alerts",
+];
+
+const MAX_WIDGETS = 8;
+const STORAGE_KEY = "lumiglow_dashboard_v1";
+
+interface DashboardConfig {
+  schemaVersion: 1;
+  widgetOrder: WidgetId[];
+  hiddenWidgets: WidgetId[];
+}
+
+function loadDashboardConfig(): DashboardConfig {
+  if (typeof window === "undefined") {
+    return { schemaVersion: 1, widgetOrder: DEFAULT_WIDGET_ORDER, hiddenWidgets: [] };
+  }
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { schemaVersion: 1, widgetOrder: DEFAULT_WIDGET_ORDER, hiddenWidgets: [] };
+    const parsed = JSON.parse(raw) as DashboardConfig;
+    // Schema migration: strip unknown widget ids
+    const knownIds = WIDGET_CATALOG.map(w => w.id);
+    return {
+      schemaVersion: 1,
+      widgetOrder: (parsed.widgetOrder ?? DEFAULT_WIDGET_ORDER).filter((id: string) => knownIds.includes(id as WidgetId)) as WidgetId[],
+      hiddenWidgets: (parsed.hiddenWidgets ?? []).filter((id: string) => knownIds.includes(id as WidgetId)) as WidgetId[],
+    };
+  } catch {
+    return { schemaVersion: 1, widgetOrder: DEFAULT_WIDGET_ORDER, hiddenWidgets: [] };
+  }
+}
+
+function saveDashboardConfig(cfg: DashboardConfig) {
+  if (typeof window !== "undefined") {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+  }
+}
+
+function PersonalizedDashboard({
+  buildings,
+  alertList,
+  scheduleActive,
+}: {
+  buildings: Building[];
+  alertList: Alert[];
+  scheduleActive: Record<string, boolean>;
+}) {
+  const [config, setConfig] = useState<DashboardConfig>(() => loadDashboardConfig());
+  const [editMode, setEditMode] = useState(false);
+  const [showCatalog, setShowCatalog] = useState(false);
+  const [savedToast, setSavedToast] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  const visibleWidgets = config.widgetOrder.filter(id => !config.hiddenWidgets.includes(id));
+
+  function updateConfig(next: DashboardConfig) {
+    setConfig(next);
+    saveDashboardConfig(next);
+  }
+
+  function moveWidget(id: WidgetId, dir: "up" | "down") {
+    const order = [...config.widgetOrder];
+    const idx = order.indexOf(id);
+    if (dir === "up" && idx > 0) {
+      [order[idx - 1], order[idx]] = [order[idx], order[idx - 1]];
+    } else if (dir === "down" && idx < order.length - 1) {
+      [order[idx], order[idx + 1]] = [order[idx + 1], order[idx]];
+    }
+    updateConfig({ ...config, widgetOrder: order });
+  }
+
+  function hideWidget(id: WidgetId) {
+    updateConfig({ ...config, hiddenWidgets: [...config.hiddenWidgets, id] });
+  }
+
+  function addWidget(id: WidgetId) {
+    if (visibleWidgets.length >= MAX_WIDGETS) return;
+    const order = config.widgetOrder.includes(id) ? config.widgetOrder : [...config.widgetOrder, id];
+    const hidden = config.hiddenWidgets.filter(h => h !== id);
+    updateConfig({ ...config, widgetOrder: order, hiddenWidgets: hidden });
+    setShowCatalog(false);
+  }
+
+  function saveLayout() {
+    setSavedToast(true);
+    setTimeout(() => setSavedToast(false), 2000);
+    setEditMode(false);
+  }
+
+  // Derived
+  const watts = buildings.flatMap(b => b.floors).flatMap(f => f.zones).reduce((s, z) => s + z.powerWatts, 0);
+  const allZones = buildings.flatMap(b => b.floors).flatMap(f => f.zones);
+  const criticalCount = alertList.filter(a => a.severity === "critical").length;
+  const warningCount = alertList.filter(a => a.severity === "warning").length;
+  const activeSchedules = schedules.filter(s => scheduleActive[s.id]);
+
+  const catalogAvailable = WIDGET_CATALOG.filter(
+    w => !config.widgetOrder.includes(w.id) || config.hiddenWidgets.includes(w.id)
+  );
+
+  function renderWidget(id: WidgetId, idx: number) {
+    const meta = WIDGET_CATALOG.find(w => w.id === id)!;
+    const isFirst = idx === 0;
+    const isLast = idx === config.widgetOrder.length - 1;
+
+    const wrapper = (children: React.ReactNode) => (
+      <div
+        key={id}
+        className={cn(
+          "relative rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 shadow-sm group",
+          meta.size === "lg" && "col-span-1 sm:col-span-2",
+          editMode && "ring-2 ring-amber-400/40"
+        )}
+      >
+        {editMode && !isMobile && (
+          <div className="absolute top-2 right-2 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={() => moveWidget(id, "up")}
+              disabled={isFirst}
+              aria-label="Move up"
+              className="p-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-amber-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ArrowUp size={12} />
+            </button>
+            <button
+              onClick={() => moveWidget(id, "down")}
+              disabled={isLast}
+              aria-label="Move down"
+              className="p-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-amber-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ArrowDown size={12} />
+            </button>
+            <button
+              onClick={() => hideWidget(id)}
+              aria-label="Hide widget"
+              className="p-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-red-500 transition-colors"
+            >
+              <EyeOff size={12} />
+            </button>
+          </div>
+        )}
+        {children}
+      </div>
+    );
+
+    switch (id) {
+      case "live-power":
+        return wrapper(
+          <div className="p-5 flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-500/20 flex items-center justify-center shrink-0">
+              <Activity size={18} className="text-violet-600 dark:text-violet-400" />
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Live Power Draw</p>
+              <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-0.5">{(watts / 1000).toFixed(1)} kW</p>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">~{((watts / 1000) * 8).toFixed(1)} kWh est. today</p>
+            </div>
+          </div>
+        );
+      case "zones-active":
+        return wrapper(
+          <div className="p-5 flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center shrink-0">
+              <Zap size={18} className="text-amber-600 dark:text-amber-400" />
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Active Zones</p>
+              <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-0.5">{allZones.filter(z => z.isOn).length} / {allZones.length}</p>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Across all floors</p>
+            </div>
+          </div>
+        );
+      case "buildings-online":
+        return wrapper(
+          <div className="p-5 flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl bg-sky-100 dark:bg-sky-500/20 flex items-center justify-center shrink-0">
+              <Building2 size={18} className="text-sky-600 dark:text-sky-400" />
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Buildings Online</p>
+              <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-0.5">{buildings.length}</p>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">All systems normal</p>
+            </div>
+          </div>
+        );
+      case "energy-savings":
+        return wrapper(
+          <div className="p-5 flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl bg-green-100 dark:bg-green-500/20 flex items-center justify-center shrink-0">
+              <TrendingDown size={18} className="text-green-600 dark:text-green-400" />
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Energy Savings</p>
+              <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-0.5">31%</p>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">vs. last-year baseline</p>
+            </div>
+          </div>
+        );
+      case "energy-chart":
+        return wrapper(
+          <div className="p-5">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-3">Energy Usage — Last 24 h</h3>
+            <EnergyChart />
+          </div>
+        );
+      case "active-alerts":
+        return wrapper(
+          <div className="p-5">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-3">Active Alerts</h3>
+            {alertList.length === 0 ? (
+              <div className="text-center py-6">
+                <CheckCircle2 size={28} className="text-green-500 mx-auto mb-2" />
+                <p className="text-sm text-slate-500 dark:text-slate-400">All clear — no active alerts</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {criticalCount > 0 && (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200/60 dark:border-red-500/20">
+                    <AlertTriangle size={14} className="text-red-500 shrink-0" />
+                    <span className="text-sm font-semibold text-red-700 dark:text-red-400">{criticalCount} critical alert{criticalCount !== 1 ? "s" : ""}</span>
+                  </div>
+                )}
+                {warningCount > 0 && (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200/60 dark:border-amber-500/20">
+                    <AlertTriangle size={14} className="text-amber-500 shrink-0" />
+                    <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">{warningCount} warning alert{warningCount !== 1 ? "s" : ""}</span>
+                  </div>
+                )}
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 px-1">{alertList.length} total active alerts</p>
+              </div>
+            )}
+          </div>
+        );
+      case "schedules-summary":
+        return wrapper(
+          <div className="p-5">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-3">Schedules</h3>
+            <div className="space-y-2">
+              {schedules.slice(0, 3).map(s => (
+                <div key={s.id} className="flex items-center gap-3">
+                  <div className={cn("w-2 h-2 rounded-full shrink-0", scheduleActive[s.id] ? "bg-green-500" : "bg-slate-300 dark:bg-slate-600")} />
+                  <span className="text-xs text-slate-700 dark:text-slate-300 truncate flex-1">{s.name}</span>
+                  <span className={cn(
+                    "text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0",
+                    s.mode === "auto" ? "bg-sky-100 text-sky-600 dark:bg-sky-500/20 dark:text-sky-400" : "bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-400"
+                  )}>{s.mode}</span>
+                </div>
+              ))}
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 pt-1">{activeSchedules.length} of {schedules.length} schedules active</p>
+            </div>
+          </div>
+        );
+      case "recent-reports":
+        return wrapper(
+          <div className="p-5">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-3">Recent Reports</h3>
+            <div className="space-y-2">
+              {reports.slice(0, 3).map(r => (
+                <div key={r.id} className="flex items-center gap-3">
+                  <BarChart3 size={13} className="text-slate-400 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">{r.name}</p>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500">{r.generated} · {r.size}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      default:
+        return null;
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <Sparkles size={15} className="text-amber-500" />
+            My Dashboard
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            {isMobile
+              ? "Personalization is available on desktop"
+              : `${visibleWidgets.length} of ${MAX_WIDGETS} max widgets · personal to you`}
+          </p>
+        </div>
+
+        {!isMobile && (
+          <div className="flex items-center gap-2">
+            {editMode ? (
+              <>
+                <button
+                  onClick={() => { setShowCatalog(s => !s); }}
+                  disabled={visibleWidgets.length >= MAX_WIDGETS}
+                  className={cn(
+                    "flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl border transition-colors",
+                    visibleWidgets.length >= MAX_WIDGETS
+                      ? "border-slate-200 dark:border-slate-700 text-slate-400 cursor-not-allowed"
+                      : "border-amber-300 text-amber-600 hover:bg-amber-50 dark:border-amber-500/30 dark:text-amber-400 dark:hover:bg-amber-500/10"
+                  )}
+                >
+                  <Plus size={12} />
+                  Add widget
+                  {visibleWidgets.length >= MAX_WIDGETS && <span className="text-[10px] ml-1">(cap reached)</span>}
+                </button>
+                <button
+                  onClick={saveLayout}
+                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-white transition-colors"
+                >
+                  <CheckCircle2 size={12} />
+                  Save layout
+                </button>
+                <button
+                  onClick={() => { setEditMode(false); setShowCatalog(false); }}
+                  className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 font-medium px-2 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setEditMode(true)}
+                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+              >
+                <SlidersHorizontal size={12} />
+                Customize
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Widget catalog drawer */}
+      {showCatalog && editMode && (
+        <div className="rounded-2xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/5 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider">Widget catalog</h3>
+            <button onClick={() => setShowCatalog(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"><X size={14} /></button>
+          </div>
+          {catalogAvailable.length === 0 ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400">All available widgets are already on your dashboard.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {catalogAvailable.map(w => (
+                <button
+                  key={w.id}
+                  onClick={() => addWidget(w.id)}
+                  className="flex items-start gap-3 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-left hover:border-amber-400 dark:hover:border-amber-500/50 hover:shadow-sm transition-all group"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center shrink-0 text-amber-600 dark:text-amber-400 group-hover:scale-110 transition-transform">
+                    {w.icon}
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{w.title}</p>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{w.description}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Mobile read-only banner */}
+      {isMobile && (
+        <div className="rounded-2xl border border-sky-200 dark:border-sky-500/30 bg-sky-50 dark:bg-sky-500/5 px-4 py-3 flex items-center gap-2.5">
+          <Info size={14} className="text-sky-500 shrink-0" />
+          <p className="text-xs text-sky-700 dark:text-sky-400">
+            Dashboard editing is available on desktop. You&apos;re viewing a read-only snapshot.
+          </p>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {visibleWidgets.length === 0 && (
+        <div className="rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 p-12 text-center">
+          <LayoutGrid size={36} className="text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+          <p className="text-sm font-semibold text-slate-900 dark:text-white">Your dashboard is empty</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xs mx-auto">
+            Personalize your view by adding widgets from the catalog. Your layout is saved automatically and shown only to you.
+          </p>
+          {!isMobile && (
+            <button
+              onClick={() => { setEditMode(true); setShowCatalog(true); }}
+              className="mt-4 flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-white mx-auto transition-colors"
+            >
+              <Plus size={13} />
+              Add your first widget
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Widget grid */}
+      {visibleWidgets.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {config.widgetOrder
+            .filter(id => !config.hiddenWidgets.includes(id))
+            .map((id, idx) => renderWidget(id, idx))}
+        </div>
+      )}
+
+      {/* Hidden widgets (edit mode) */}
+      {editMode && config.hiddenWidgets.length > 0 && (
+        <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 p-4">
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">Hidden widgets</p>
+          <div className="flex flex-wrap gap-2">
+            {config.hiddenWidgets.map(id => {
+              const meta = WIDGET_CATALOG.find(w => w.id === id)!;
+              return (
+                <button
+                  key={id}
+                  onClick={() => visibleWidgets.length < MAX_WIDGETS && addWidget(id)}
+                  disabled={visibleWidgets.length >= MAX_WIDGETS}
+                  className={cn(
+                    "flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors",
+                    visibleWidgets.length >= MAX_WIDGETS
+                      ? "border-slate-200 dark:border-slate-700 text-slate-400 cursor-not-allowed"
+                      : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-amber-400 hover:text-amber-600 dark:hover:text-amber-400"
+                  )}
+                >
+                  <Eye size={11} />
+                  {meta.title}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Saved toast */}
+      {savedToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-slate-900 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-xl">
+          <CheckCircle2 size={15} className="text-green-400 shrink-0" />
+          Layout saved to your profile
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
 export default function DashboardPage() {
   const [tab, setTab] = useState<Tab>("overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -1135,13 +1627,14 @@ export default function DashboardPage() {
   const savings = 31;
 
   const navItems: { id: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
-    { id: "overview",     label: "Overview",     icon: <LayoutDashboard size={17} /> },
-    { id: "buildings",    label: "Buildings",    icon: <Building2 size={17} /> },
-    { id: "alerts",       label: "Alerts",       icon: <Bell size={17} />, badge: alertList.filter(a => a.severity !== "info").length },
-    { id: "schedules",    label: "Schedules",    icon: <Calendar size={17} /> },
-    { id: "reports",      label: "Reports",      icon: <BarChart3 size={17} /> },
-    { id: "integrations", label: "Integrations", icon: <Plug size={17} /> },
-    { id: "settings",     label: "Settings",     icon: <Settings size={17} /> },
+    { id: "overview",      label: "Overview",      icon: <LayoutDashboard size={17} /> },
+    { id: "my-dashboard",  label: "My Dashboard",  icon: <LayoutGrid size={17} /> },
+    { id: "buildings",     label: "Buildings",     icon: <Building2 size={17} /> },
+    { id: "alerts",        label: "Alerts",        icon: <Bell size={17} />, badge: alertList.filter(a => a.severity !== "info").length },
+    { id: "schedules",     label: "Schedules",     icon: <Calendar size={17} /> },
+    { id: "reports",       label: "Reports",       icon: <BarChart3 size={17} /> },
+    { id: "integrations",  label: "Integrations",  icon: <Plug size={17} /> },
+    { id: "settings",      label: "Settings",      icon: <Settings size={17} /> },
   ];
 
   const filteredZones = buildings
@@ -1244,7 +1737,9 @@ export default function DashboardPage() {
           </button>
 
           <div>
-            <h1 className="text-sm font-bold text-slate-900 dark:text-white capitalize">{tab}</h1>
+            <h1 className="text-sm font-bold text-slate-900 dark:text-white capitalize">
+              {tab === "my-dashboard" ? "My Dashboard" : tab}
+            </h1>
             <p className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:block">
               {branding.tagline}
             </p>
@@ -1280,6 +1775,15 @@ export default function DashboardPage() {
 
         {/* Content */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+
+          {/* ── MY DASHBOARD ── */}
+          {tab === "my-dashboard" && (
+            <PersonalizedDashboard
+              buildings={buildings}
+              alertList={alertList}
+              scheduleActive={scheduleActive}
+            />
+          )}
 
           {/* ── OVERVIEW ── */}
           {tab === "overview" && (
