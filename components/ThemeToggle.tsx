@@ -11,13 +11,12 @@ const OPTIONS: { value: Theme; label: string; Icon: typeof Monitor }[] = [
 ];
 
 function applyTheme(theme: Theme) {
-  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  // Guard against Android browsers where matchMedia may be unavailable
+  const mq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+  const prefersDark = mq ? mq.matches : false;
   const dark = theme === "dark" || (theme === "system" && prefersDark);
-  if (dark) {
-    document.documentElement.setAttribute("data-theme", "dark");
-  } else {
-    document.documentElement.removeAttribute("data-theme");
-  }
+  // Always set the attribute (never remove) so the CSS :not([data-theme='light']) fallback works
+  document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
 }
 
 export default function ThemeToggle() {
@@ -28,9 +27,12 @@ export default function ThemeToggle() {
   useEffect(() => {
     const saved = (localStorage.getItem("lumiglow-theme") as Theme | null) ?? "system";
     setTheme(saved);
+    // Re-apply on mount — corrects any FOUC script failure (e.g. matchMedia unavailable on Android)
+    applyTheme(saved);
 
     // Keep system mode in sync when OS preference changes
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const mq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+    if (!mq) return;
     const onSystem = () => {
       if ((localStorage.getItem("lumiglow-theme") ?? "system") === "system") {
         applyTheme("system");

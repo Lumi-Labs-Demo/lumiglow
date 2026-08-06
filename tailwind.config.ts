@@ -1,7 +1,12 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
-  darkMode: ["selector", "[data-theme='dark']"],
+  darkMode: ["variant", [
+    // Explicit dark: data-theme="dark" on <html> (set by JS)
+    "&:where([data-theme='dark'] *)",
+    // CSS fallback: OS dark preference and JS hasn't explicitly set light (Android safety net)
+    "@media (prefers-color-scheme: dark) { &:not([data-theme='light'] *) }",
+  ]],
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
