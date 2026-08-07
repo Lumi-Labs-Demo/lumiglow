@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
 import {
   Zap, LayoutDashboard, Building2, Bell, Calendar,
@@ -10,6 +10,7 @@ import {
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
   Palette, Upload, Eye, Plug, RefreshCw, ArrowLeftRight,
   Database, Globe, Link2, AlertCircle, Clock,
+  GripVertical, Plus, Pencil, LayoutGrid, Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -32,6 +33,59 @@ interface BrandingConfig {
   accentColor: string;
   logoUrl: string;
   logoInitials: string;
+}
+
+// ─── Widget System ────────────────────────────────────────────────────────────
+
+type WidgetType =
+  | "kpi-row"
+  | "energy-chart"
+  | "recent-alerts"
+  | "buildings-summary"
+  | "schedules-summary"
+  | "reports-summary";
+
+interface WidgetConfig {
+  id: string;
+  type: WidgetType;
+}
+
+const WIDGET_CAP = 8;
+
+interface WidgetMeta {
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+}
+
+const WIDGET_META: Record<WidgetType, WidgetMeta> = {
+  "kpi-row":           { label: "KPI Overview",       description: "Buildings, zones, live power draw & savings at a glance", icon: <LayoutDashboard size={15} /> },
+  "energy-chart":      { label: "Energy Chart",        description: "Hourly energy usage vs baseline for all buildings",       icon: <BarChart3 size={15} /> },
+  "recent-alerts":     { label: "Recent Alerts",       description: "Latest critical & warning alerts in your portfolio",      icon: <Bell size={15} /> },
+  "buildings-summary": { label: "Buildings Summary",   description: "Zone & power status across your building portfolio",      icon: <Building2 size={15} /> },
+  "schedules-summary": { label: "Active Schedules",    description: "Status overview of your top lighting schedules",          icon: <Calendar size={15} /> },
+  "reports-summary":   { label: "Recent Reports",      description: "Latest generated energy & audit reports",                 icon: <BarChart3 size={15} /> },
+};
+
+const ALL_WIDGET_TYPES: WidgetType[] = [
+  "kpi-row", "energy-chart", "recent-alerts",
+  "buildings-summary", "schedules-summary", "reports-summary",
+];
+
+const DEFAULT_WIDGETS: WidgetConfig[] = [
+  { id: "w-kpi",       type: "kpi-row" },
+  { id: "w-chart",     type: "energy-chart" },
+  { id: "w-alerts",    type: "recent-alerts" },
+  { id: "w-buildings", type: "buildings-summary" },
+];
+
+function loadWidgets(): WidgetConfig[] {
+  if (typeof window === "undefined") return DEFAULT_WIDGETS;
+  try {
+    const saved = localStorage.getItem("lg-dashboard-v1");
+    if (saved) return JSON.parse(saved) as WidgetConfig[];
+  } catch {}
+  return DEFAULT_WIDGETS;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -58,7 +112,6 @@ function EnergyChart() {
   const chartH = H - padT - padB;
 
   const maxY = Math.max(...energyData.map(d => Math.max(d.kWh, d.baseline))) * 1.15;
-
   const xStep = chartW / (energyData.length - 1);
 
   function px(i: number) { return padL + i * xStep; }
@@ -66,7 +119,6 @@ function EnergyChart() {
 
   const kwhPath = energyData.map((d, i) => `${i === 0 ? "M" : "L"}${px(i).toFixed(1)},${py(d.kWh).toFixed(1)}`).join(" ");
   const basePath = energyData.map((d, i) => `${i === 0 ? "M" : "L"}${px(i).toFixed(1)},${py(d.baseline).toFixed(1)}`).join(" ");
-
   const fillPath = kwhPath + ` L${px(energyData.length - 1).toFixed(1)},${(padT + chartH).toFixed(1)} L${padL},${(padT + chartH).toFixed(1)} Z`;
 
   return (
@@ -83,8 +135,6 @@ function EnergyChart() {
             <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.02" />
           </linearGradient>
         </defs>
-
-        {/* Grid lines */}
         {[0, 0.25, 0.5, 0.75, 1].map(t => {
           const y = padT + chartH * (1 - t);
           return (
@@ -96,17 +146,9 @@ function EnergyChart() {
             </g>
           );
         })}
-
-        {/* Baseline */}
         <path d={basePath} fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeDasharray="4 3" />
-
-        {/* kWh fill */}
         <path d={fillPath} fill="url(#kwhGrad)" />
-
-        {/* kWh line */}
         <path d={kwhPath} fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-
-        {/* X labels */}
         {energyData.map((d, i) => (
           i % 2 === 0 && (
             <text key={i} x={px(i)} y={H - 6} textAnchor="middle" fontSize="9" fill="currentColor" fillOpacity="0.45" className="text-slate-500">
@@ -114,32 +156,15 @@ function EnergyChart() {
             </text>
           )
         ))}
-
-        {/* Hover areas */}
         {energyData.map((d, i) => (
           <g key={i} onMouseEnter={() => setHovered(i)}>
-            <rect
-              x={px(i) - xStep / 2}
-              y={padT}
-              width={xStep}
-              height={chartH}
-              fill="transparent"
-            />
+            <rect x={px(i) - xStep / 2} y={padT} width={xStep} height={chartH} fill="transparent" />
             {hovered === i && (
               <>
                 <line x1={px(i)} y1={padT} x2={px(i)} y2={padT + chartH} stroke="#f59e0b" strokeWidth="1" strokeOpacity="0.5" />
                 <circle cx={px(i)} cy={py(d.kWh)} r="4" fill="#f59e0b" stroke="white" strokeWidth="1.5" />
                 <circle cx={px(i)} cy={py(d.baseline)} r="3" fill="#94a3b8" stroke="white" strokeWidth="1.5" />
-                {/* Tooltip */}
-                <rect
-                  x={Math.min(px(i) - 38, W - padR - 80)}
-                  y={py(d.kWh) - 46}
-                  width={78}
-                  height={42}
-                  rx="5"
-                  fill="#1e293b"
-                  fillOpacity="0.95"
-                />
+                <rect x={Math.min(px(i) - 38, W - padR - 80)} y={py(d.kWh) - 46} width={78} height={42} rx="5" fill="#1e293b" fillOpacity="0.95" />
                 <text x={Math.min(px(i) - 38, W - padR - 80) + 7} y={py(d.kWh) - 32} fontSize="10" fill="#f59e0b" fontWeight="600">{d.hour}</text>
                 <text x={Math.min(px(i) - 38, W - padR - 80) + 7} y={py(d.kWh) - 19} fontSize="9" fill="white">{`Usage: ${d.kWh} kWh`}</text>
                 <text x={Math.min(px(i) - 38, W - padR - 80) + 7} y={py(d.kWh) - 8} fontSize="9" fill="#94a3b8">{`Baseline: ${d.baseline} kWh`}</text>
@@ -148,8 +173,6 @@ function EnergyChart() {
           </g>
         ))}
       </svg>
-
-      {/* Legend */}
       <div className="flex items-center gap-4 mt-1 px-1">
         <div className="flex items-center gap-1.5">
           <div className="w-6 h-0.5 bg-amber-400 rounded" />
@@ -178,7 +201,6 @@ function ZoneRow({ zone, onToggle, onBrightness }: {
         ? "bg-amber-50 dark:bg-amber-500/5 border-amber-200/60 dark:border-amber-500/20"
         : "bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700/50"
     )}>
-      {/* Toggle */}
       <button
         onClick={() => onToggle(zone.id)}
         className={cn("shrink-0 transition-colors", zone.isOn ? "text-amber-500" : "text-slate-400 dark:text-slate-600")}
@@ -186,8 +208,6 @@ function ZoneRow({ zone, onToggle, onBrightness }: {
       >
         {zone.isOn ? <ToggleRight size={26} /> : <ToggleLeft size={26} />}
       </button>
-
-      {/* Name & meta */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className={cn("text-sm font-semibold truncate", zone.isOn ? "text-slate-900 dark:text-white" : "text-slate-400 dark:text-slate-500")}>
@@ -206,16 +226,10 @@ function ZoneRow({ zone, onToggle, onBrightness }: {
           {zone.lastChangedBy} · {zone.lastChangedAt}
         </p>
       </div>
-
-      {/* Brightness */}
       <div className="hidden sm:flex items-center gap-2 w-32 shrink-0">
         <Sun size={12} className={cn("shrink-0", zone.isOn ? "text-amber-400" : "text-slate-300 dark:text-slate-600")} />
         <input
-          type="range"
-          min={0}
-          max={100}
-          value={zone.brightness}
-          disabled={!zone.isOn}
+          type="range" min={0} max={100} value={zone.brightness} disabled={!zone.isOn}
           onChange={e => onBrightness(zone.id, Number(e.target.value))}
           className={cn("flex-1 h-1.5 rounded-full appearance-none cursor-pointer accent-amber-400", !zone.isOn && "opacity-30 cursor-not-allowed")}
         />
@@ -223,8 +237,6 @@ function ZoneRow({ zone, onToggle, onBrightness }: {
           {zone.brightness}%
         </span>
       </div>
-
-      {/* Watts */}
       <div className="shrink-0 text-right">
         <span className={cn("text-sm font-bold tabular-nums", zone.isOn ? "text-slate-800 dark:text-slate-200" : "text-slate-300 dark:text-slate-600")}>
           {zone.powerWatts}W
@@ -264,11 +276,11 @@ function KpiCard({ label, value, sub, icon, accent }: {
 // ─── Schedule data ────────────────────────────────────────────────────────────
 
 const schedules = [
-  { id: "s1", name: "Business Hours",  scope: "All buildings", time: "Mon–Fri  8:00 – 19:00",  mode: "auto",    active: true  },
-  { id: "s2", name: "Weekend Dimmed",  scope: "HQ Tower",      time: "Sat–Sun  9:00 – 18:00",  mode: "auto",    active: true  },
-  { id: "s3", name: "Holiday Blackout",scope: "All buildings", time: "Public holidays",         mode: "holiday", active: false },
-  { id: "s4", name: "Late Night Min",  scope: "EMEA Office",   time: "Daily  22:00 – 06:00",    mode: "auto",    active: true  },
-  { id: "s5", name: "Demo Suite Boost",scope: "West Campus",   time: "Mon–Fri  09:00 – 17:00",  mode: "manual",  active: true  },
+  { id: "s1", name: "Business Hours",   scope: "All buildings", time: "Mon–Fri  8:00 – 19:00",  mode: "auto",    active: true  },
+  { id: "s2", name: "Weekend Dimmed",   scope: "HQ Tower",      time: "Sat–Sun  9:00 – 18:00",  mode: "auto",    active: true  },
+  { id: "s3", name: "Holiday Blackout", scope: "All buildings", time: "Public holidays",         mode: "holiday", active: false },
+  { id: "s4", name: "Late Night Min",   scope: "EMEA Office",   time: "Daily  22:00 – 06:00",   mode: "auto",    active: true  },
+  { id: "s5", name: "Demo Suite Boost", scope: "West Campus",   time: "Mon–Fri  09:00 – 17:00", mode: "manual",  active: true  },
 ];
 
 // ─── Report data ──────────────────────────────────────────────────────────────
@@ -280,6 +292,529 @@ const reports = [
   { id: "r4", name: "Zone Uptime Report",     scope: "West Campus",   generated: "Apr 28, 2025",  size: "56 KB"  },
   { id: "r5", name: "Firmware Inventory",     scope: "All buildings", generated: "Apr 25, 2025",  size: "34 KB"  },
 ];
+
+// ─── Widget Catalog Panel ─────────────────────────────────────────────────────
+
+function WidgetCatalogPanel({
+  widgets,
+  onAdd,
+  onClose,
+  accentColor,
+}: {
+  widgets: WidgetConfig[];
+  onAdd: (type: WidgetType) => void;
+  onClose: () => void;
+  accentColor: string;
+}) {
+  const activeTypes = new Set(widgets.map(w => w.type));
+  const availableTypes = ALL_WIDGET_TYPES.filter(t => !activeTypes.has(t));
+  const atCap = widgets.length >= WIDGET_CAP;
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed right-0 top-0 bottom-0 z-50 w-80 bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 flex flex-col shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Widget catalog</h3>
+            <p className="text-[11px] text-slate-400 mt-0.5">{widgets.length} / {WIDGET_CAP} widgets added</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 transition-colors">
+            <X size={15} />
+          </button>
+        </div>
+
+        {atCap && (
+          <div className="mx-4 mt-4 px-3 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 flex items-start gap-2">
+            <AlertTriangle size={13} className="text-amber-500 mt-0.5 shrink-0" />
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              You&apos;ve reached the {WIDGET_CAP}-widget limit. Remove a widget to add a new one.
+            </p>
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {availableTypes.length === 0 && (
+            <div className="text-center py-10">
+              <CheckCircle2 size={28} className="text-green-500 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">All widgets added!</p>
+              <p className="text-xs text-slate-400 mt-1">Every available widget is on your dashboard.</p>
+            </div>
+          )}
+
+          {availableTypes.map(type => {
+            const meta = WIDGET_META[type];
+            return (
+              <div key={type} className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                <div className="w-8 h-8 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400 shrink-0 shadow-sm">
+                  {meta.icon}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{meta.label}</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5 leading-tight">{meta.description}</p>
+                </div>
+                <button
+                  onClick={() => !atCap && onAdd(type)}
+                  disabled={atCap}
+                  className={cn(
+                    "shrink-0 flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all",
+                    atCap ? "text-slate-300 dark:text-slate-600 cursor-not-allowed" : "text-white hover:opacity-90 shadow"
+                  )}
+                  style={atCap ? {} : { backgroundColor: accentColor }}
+                >
+                  <Plus size={12} /> Add
+                </button>
+              </div>
+            );
+          })}
+
+          {activeTypes.size > 0 && (
+            <div className="pt-2">
+              <p className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 px-1">On your dashboard</p>
+              {[...activeTypes].map(type => {
+                const meta = WIDGET_META[type];
+                return (
+                  <div key={type} className="flex items-center gap-3 p-3 rounded-xl opacity-50">
+                    <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 shrink-0">
+                      {meta.icon}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-600 dark:text-slate-400">{meta.label}</p>
+                    </div>
+                    <CheckCircle2 size={14} className="text-green-500 shrink-0" />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── Widget Wrapper (edit mode) ───────────────────────────────────────────────
+
+function WidgetWrapper({
+  widget,
+  index,
+  total,
+  editMode,
+  isDragOver,
+  onMoveUp,
+  onMoveDown,
+  onRemove,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  children,
+}: {
+  widget: WidgetConfig;
+  index: number;
+  total: number;
+  editMode: boolean;
+  isDragOver: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onRemove: () => void;
+  onDragStart: () => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDrop: () => void;
+  children: React.ReactNode;
+}) {
+  const meta = WIDGET_META[widget.type];
+
+  if (!editMode) return <div>{children}</div>;
+
+  return (
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      className={cn(
+        "relative rounded-2xl border-2 transition-all group",
+        isDragOver
+          ? "border-amber-400 shadow-amber-200/50 dark:shadow-amber-500/20 shadow-lg scale-[1.01]"
+          : "border-dashed border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-600"
+      )}
+    >
+      <div className="flex items-center gap-1.5 px-3 pt-2.5 pb-1">
+        <div className="cursor-grab active:cursor-grabbing text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 transition-colors">
+          <GripVertical size={15} />
+        </div>
+        <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 flex items-center gap-1">
+          {meta.icon}
+          {meta.label}
+        </span>
+        <div className="flex-1" />
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={onMoveUp}
+            disabled={index === 0}
+            title="Move up"
+            aria-label="Move widget up"
+            className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            <ChevronUp size={13} />
+          </button>
+          <button
+            onClick={onMoveDown}
+            disabled={index === total - 1}
+            title="Move down"
+            aria-label="Move widget down"
+            className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            <ChevronDown size={13} />
+          </button>
+          <button
+            onClick={onRemove}
+            title="Remove widget"
+            aria-label="Remove widget from dashboard"
+            className="p-1 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors ml-0.5"
+          >
+            <X size={13} />
+          </button>
+        </div>
+      </div>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+// ─── Personalized Dashboard Content ──────────────────────────────────────────
+
+function PersonalizedDashboard({
+  buildings,
+  alertList,
+  onSetTab,
+  accentColor,
+}: {
+  buildings: Building[];
+  alertList: Alert[];
+  onSetTab: (tab: Tab) => void;
+  accentColor: string;
+}) {
+  const [widgets, setWidgets] = useState<WidgetConfig[]>(DEFAULT_WIDGETS);
+  const [editMode, setEditMode] = useState(false);
+  const [showCatalog, setShowCatalog] = useState(false);
+  const [dragSrc, setDragSrc] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState<string | null>(null);
+  const [scheduleActive] = useState<Record<string, boolean>>(
+    Object.fromEntries(schedules.map(s => [s.id, s.active]))
+  );
+  const [reportToast, setReportToast] = useState<string | null>(null);
+  const [savedToast, setSavedToast] = useState(false);
+
+  useEffect(() => {
+    const loaded = loadWidgets();
+    setWidgets(loaded);
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("lg-dashboard-v1", JSON.stringify(widgets));
+    } catch {}
+  }, [widgets]);
+
+  const watts = totalWatts(buildings);
+  const kwhEst = ((watts / 1000) * 8).toFixed(1);
+  const savings = 31;
+
+  function moveWidget(from: number, to: number) {
+    setWidgets(prev => {
+      const next = [...prev];
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      return next;
+    });
+  }
+
+  function removeWidget(id: string) {
+    setWidgets(prev => prev.filter(w => w.id !== id));
+  }
+
+  function addWidget(type: WidgetType) {
+    if (widgets.length >= WIDGET_CAP) return;
+    setWidgets(prev => [...prev, { id: `w-${type}-${Date.now()}`, type }]);
+  }
+
+  function handleDrop(targetId: string) {
+    if (!dragSrc || dragSrc === targetId) { setDragSrc(null); setDragOver(null); return; }
+    const from = widgets.findIndex(w => w.id === dragSrc);
+    const to   = widgets.findIndex(w => w.id === targetId);
+    if (from !== -1 && to !== -1) moveWidget(from, to);
+    setDragSrc(null);
+    setDragOver(null);
+  }
+
+  function saveAndExit() {
+    setEditMode(false);
+    setSavedToast(true);
+    setTimeout(() => setSavedToast(false), 2500);
+  }
+
+  function renderWidgetContent(widget: WidgetConfig) {
+    switch (widget.type) {
+      case "kpi-row":
+        return (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <KpiCard label="Buildings online" value={String(buildings.length)} sub="All systems normal" icon={<Building2 size={18} className="text-sky-600 dark:text-sky-400" />} accent="bg-sky-100 dark:bg-sky-500/20" />
+            <KpiCard label="Zones active" value={`${zonesOn(buildings)} / ${totalZones(buildings)}`} sub="Across all floors" icon={<Zap size={18} className="text-amber-600 dark:text-amber-400" />} accent="bg-amber-100 dark:bg-amber-500/20" />
+            <KpiCard label="Live power draw" value={`${(watts / 1000).toFixed(1)} kW`} sub={`~${kwhEst} kWh est. today`} icon={<Activity size={18} className="text-violet-600 dark:text-violet-400" />} accent="bg-violet-100 dark:bg-violet-500/20" />
+            <KpiCard label="Energy savings" value={`${savings}%`} sub="vs. last-year baseline" icon={<TrendingDown size={18} className="text-green-600 dark:text-green-400" />} accent="bg-green-100 dark:bg-green-500/20" />
+          </div>
+        );
+
+      case "energy-chart":
+        return (
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">Energy usage today</h2>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">All buildings · kWh per hour</p>
+              </div>
+              <span className="text-xs font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2.5 py-1 rounded-full">
+                ↓ {savings}% vs baseline
+              </span>
+            </div>
+            <EnergyChart />
+          </div>
+        );
+
+      case "recent-alerts":
+        return (
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Recent alerts</h2>
+              <button onClick={() => onSetTab("alerts")} className="text-xs font-semibold hover:opacity-80 transition-opacity" style={{ color: accentColor }}>
+                View all →
+              </button>
+            </div>
+            <div className="space-y-2">
+              {alertList.slice(0, 4).map(a => (
+                <div key={a.id} className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                  <AlertBadge severity={a.severity} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-slate-700 dark:text-slate-300 font-medium truncate">{a.message}</p>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{a.zone} · {a.ts}</p>
+                  </div>
+                </div>
+              ))}
+              {alertList.length === 0 && <p className="text-sm text-slate-400 text-center py-4">All clear 🎉</p>}
+            </div>
+          </div>
+        );
+
+      case "buildings-summary":
+        return (
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Buildings</h2>
+              <button onClick={() => onSetTab("buildings")} className="text-xs font-semibold hover:opacity-80 transition-opacity" style={{ color: accentColor }}>
+                Manage →
+              </button>
+            </div>
+            <div className="space-y-2">
+              {buildings.map(b => {
+                const bZones = b.floors.flatMap(f => f.zones);
+                const on = bZones.filter(z => z.isOn).length;
+                const bWatts = bZones.reduce((s, z) => s + z.powerWatts, 0);
+                return (
+                  <div key={b.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                    <Building2 size={15} className="text-slate-400 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{b.name}</p>
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500">{b.location}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-xs font-bold text-slate-800 dark:text-white">{on}/{bZones.length} on</p>
+                      <p className="text-[11px] text-slate-400">{(bWatts / 1000).toFixed(1)} kW</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+
+      case "schedules-summary":
+        return (
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Active schedules</h2>
+              <button onClick={() => onSetTab("schedules")} className="text-xs font-semibold hover:opacity-80 transition-opacity" style={{ color: accentColor }}>
+                View all →
+              </button>
+            </div>
+            <div className="space-y-2">
+              {schedules.slice(0, 4).map(s => (
+                <div key={s.id} className={cn("flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 transition-opacity", !scheduleActive[s.id] && "opacity-50")}>
+                  <Calendar size={14} className={scheduleActive[s.id] ? "text-amber-500 shrink-0" : "text-slate-300 dark:text-slate-600 shrink-0"} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{s.name}</p>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500">{s.scope}</p>
+                  </div>
+                  <span className={cn("shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full", scheduleActive[s.id] ? "bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-400" : "bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500")}>
+                    {scheduleActive[s.id] ? "active" : "off"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+
+      case "reports-summary":
+        return (
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Recent reports</h2>
+              <button onClick={() => onSetTab("reports")} className="text-xs font-semibold hover:opacity-80 transition-opacity" style={{ color: accentColor }}>
+                View all →
+              </button>
+            </div>
+            <div className="space-y-2">
+              {reports.slice(0, 3).map(r => (
+                <div key={r.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                  <BarChart3 size={14} className="text-slate-400 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{r.name}</p>
+                    <p className="text-[11px] text-slate-400">{r.generated} · {r.size}</p>
+                  </div>
+                  <button onClick={() => { setReportToast(`Downloading "${r.name}"…`); setTimeout(() => setReportToast(null), 2500); }} className="text-xs font-semibold hover:opacity-70 transition-opacity shrink-0" style={{ color: accentColor }}>↓</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Dashboard header */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div>
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+            <Sparkles size={14} className="text-amber-400" />
+            My Dashboard
+          </h2>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+            {widgets.length} widget{widgets.length !== 1 ? "s" : ""} · Personalized for Jordan Davis
+          </p>
+        </div>
+        <div className="flex-1" />
+        <div className="hidden md:flex items-center gap-2">
+          {editMode ? (
+            <>
+              <button
+                onClick={() => setShowCatalog(true)}
+                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+              >
+                <Plus size={12} /> Add widget
+              </button>
+              <button
+                onClick={saveAndExit}
+                className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-xl text-white shadow transition-all hover:opacity-90"
+                style={{ backgroundColor: accentColor }}
+              >
+                <CheckCircle2 size={12} /> Done
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setEditMode(true)}
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+            >
+              <Pencil size={12} /> Customize
+            </button>
+          )}
+        </div>
+        <div className="flex md:hidden items-center gap-1.5 text-[11px] text-slate-400 dark:text-slate-500">
+          <Eye size={11} /> Read-only on mobile
+        </div>
+      </div>
+
+      {/* Edit mode banner */}
+      {editMode && (
+        <div
+          className="hidden md:flex items-center gap-3 px-4 py-3 rounded-xl border"
+          style={{ backgroundColor: `${accentColor}15`, borderColor: `${accentColor}40` }}
+        >
+          <SlidersHorizontal size={14} style={{ color: accentColor }} className="shrink-0" />
+          <p className="text-xs font-medium text-slate-700 dark:text-slate-300">
+            <strong>Edit mode:</strong> Drag to reorder, use ↑↓ buttons, or × to remove widgets. Changes save automatically.
+          </p>
+          <button onClick={saveAndExit} className="ml-auto text-xs font-semibold hover:opacity-70 transition-opacity" style={{ color: accentColor }}>
+            Done editing
+          </button>
+        </div>
+      )}
+
+      {/* Widgets */}
+      {widgets.length === 0 ? (
+        <div className="rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 p-16 text-center">
+          <LayoutGrid size={36} className="text-slate-300 dark:text-slate-600 mx-auto mb-4" />
+          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Your dashboard is empty</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 mb-5 max-w-xs mx-auto">
+            Add widgets from the catalog to build a dashboard tailored to what matters most to you.
+          </p>
+          <button
+            onClick={() => { setEditMode(true); setShowCatalog(true); }}
+            className="hidden md:inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2.5 rounded-xl text-white shadow transition-all hover:opacity-90"
+            style={{ backgroundColor: accentColor }}
+          >
+            <Plus size={14} /> Add your first widget
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {widgets.map((widget, index) => (
+            <WidgetWrapper
+              key={widget.id}
+              widget={widget}
+              index={index}
+              total={widgets.length}
+              editMode={editMode}
+              isDragOver={dragOver === widget.id && dragSrc !== widget.id}
+              onMoveUp={() => index > 0 && moveWidget(index, index - 1)}
+              onMoveDown={() => index < widgets.length - 1 && moveWidget(index, index + 1)}
+              onRemove={() => removeWidget(widget.id)}
+              onDragStart={() => setDragSrc(widget.id)}
+              onDragOver={e => { e.preventDefault(); setDragOver(widget.id); }}
+              onDrop={() => handleDrop(widget.id)}
+            >
+              {renderWidgetContent(widget)}
+            </WidgetWrapper>
+          ))}
+        </div>
+      )}
+
+      {showCatalog && (
+        <WidgetCatalogPanel
+          widgets={widgets}
+          onAdd={type => { addWidget(type); setShowCatalog(false); }}
+          onClose={() => setShowCatalog(false)}
+          accentColor={accentColor}
+        />
+      )}
+
+      {savedToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-slate-900 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-xl">
+          <CheckCircle2 size={15} className="text-green-400 shrink-0" /> Dashboard saved!
+        </div>
+      )}
+      {reportToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-slate-900 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-xl">
+          <CheckCircle2 size={15} className="text-green-400 shrink-0" /> {reportToast}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── Settings Panel ───────────────────────────────────────────────────────────
 
@@ -297,29 +832,17 @@ function SettingsPanel({
   const [twoFA, setTwoFA] = useState(true);
   const [sessionTimeout, setSessionTimeout] = useState("60");
   const [saved, setSaved] = useState(false);
-
   const [draft, setDraft] = useState<BrandingConfig>(branding);
   const [brandingSaved, setBrandingSaved] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  function save() {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  }
-
-  function applyBranding() {
-    onBrandingChange(draft);
-    setBrandingSaved(true);
-    setTimeout(() => setBrandingSaved(false), 2500);
-  }
-
+  function save() { setSaved(true); setTimeout(() => setSaved(false), 2000); }
+  function applyBranding() { onBrandingChange(draft); setBrandingSaved(true); setTimeout(() => setBrandingSaved(false), 2500); }
   function handleLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      setDraft(d => ({ ...d, logoUrl: ev.target?.result as string }));
-    };
+    reader.onload = (ev) => setDraft(d => ({ ...d, logoUrl: ev.target?.result as string }));
     reader.readAsDataURL(file);
   }
 
@@ -328,154 +851,73 @@ function SettingsPanel({
 
   return (
     <div className="max-w-2xl space-y-6">
-      {/* Profile */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
         <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-4">Profile</h3>
         <div className="flex items-center gap-4 mb-5">
           <div className="w-14 h-14 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-lg font-bold shadow">JD</div>
-          <div>
-            <p className="text-sm font-semibold text-slate-900 dark:text-white">Jordan Davis</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">jordan@acme.com · Facility Manager</p>
-          </div>
+          <div><p className="text-sm font-semibold text-slate-900 dark:text-white">Jordan Davis</p><p className="text-xs text-slate-500 dark:text-slate-400">jordan@acme.com · Facility Manager</p></div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Full name</label>
-            <input defaultValue="Jordan Davis" className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400" />
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Email</label>
-            <input defaultValue="jordan@acme.com" className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400" />
-          </div>
+          <div><label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Full name</label><input defaultValue="Jordan Davis" className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400" /></div>
+          <div><label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Email</label><input defaultValue="jordan@acme.com" className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400" /></div>
         </div>
       </div>
-
-      {/* Notifications */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
         <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-4">Notifications</h3>
         {[
-          { label: "Email alerts",       sub: "Critical & warning events",    val: notifEmail, set: setNotifEmail },
-          { label: "Slack integration",  sub: "#facilities-alerts channel",   val: notifSlack, set: setNotifSlack },
-          { label: "PagerDuty",          sub: "Critical-only escalation",     val: notifPager, set: setNotifPager },
+          { label: "Email alerts",      sub: "Critical & warning events",   val: notifEmail, set: setNotifEmail },
+          { label: "Slack integration", sub: "#facilities-alerts channel",  val: notifSlack, set: setNotifSlack },
+          { label: "PagerDuty",         sub: "Critical-only escalation",    val: notifPager, set: setNotifPager },
         ].map(row => (
           <div key={row.label} className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800 last:border-0">
-            <div>
-              <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{row.label}</p>
-              <p className="text-xs text-slate-400 dark:text-slate-500">{row.sub}</p>
-            </div>
-            <button onClick={() => row.set(!row.val)} className={cn("transition-colors", row.val ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>
-              {row.val ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
-            </button>
+            <div><p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{row.label}</p><p className="text-xs text-slate-400 dark:text-slate-500">{row.sub}</p></div>
+            <button onClick={() => row.set(!row.val)} className={cn("transition-colors", row.val ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>{row.val ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}</button>
           </div>
         ))}
       </div>
-
-      {/* Automation */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
         <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-4">Automation</h3>
         <div className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800">
-          <div>
-            <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">Auto-apply schedule policies</p>
-            <p className="text-xs text-slate-400 dark:text-slate-500">System adjusts brightness automatically</p>
-          </div>
-          <button onClick={() => setAutoPolicy(!autoPolicy)} className={cn("transition-colors", autoPolicy ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>
-            {autoPolicy ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
-          </button>
+          <div><p className="text-sm text-slate-800 dark:text-slate-200 font-medium">Auto-apply schedule policies</p><p className="text-xs text-slate-400 dark:text-slate-500">System adjusts brightness automatically</p></div>
+          <button onClick={() => setAutoPolicy(!autoPolicy)} className={cn("transition-colors", autoPolicy ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>{autoPolicy ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}</button>
         </div>
       </div>
-
-      {/* Security */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
         <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-4">Security</h3>
         <div className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800">
-          <div>
-            <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">Two-factor authentication</p>
-            <p className="text-xs text-slate-400 dark:text-slate-500">TOTP via authenticator app</p>
-          </div>
-          <button onClick={() => setTwoFA(!twoFA)} className={cn("transition-colors", twoFA ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>
-            {twoFA ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
-          </button>
+          <div><p className="text-sm text-slate-800 dark:text-slate-200 font-medium">Two-factor authentication</p><p className="text-xs text-slate-400 dark:text-slate-500">TOTP via authenticator app</p></div>
+          <button onClick={() => setTwoFA(!twoFA)} className={cn("transition-colors", twoFA ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>{twoFA ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}</button>
         </div>
         <div className="py-3">
           <label className="text-sm text-slate-800 dark:text-slate-200 font-medium block mb-1">Session timeout (minutes)</label>
-          <select
-            value={sessionTimeout}
-            onChange={e => setSessionTimeout(e.target.value)}
-            className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-          >
+          <select value={sessionTimeout} onChange={e => setSessionTimeout(e.target.value)} className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400">
             {["15", "30", "60", "120", "480"].map(v => <option key={v} value={v}>{v} min</option>)}
           </select>
         </div>
       </div>
-
-      {/* Custom Branding */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-5">
           <Palette size={16} style={accentText} />
           <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Custom Branding</h3>
           <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400">Enterprise</span>
         </div>
-
-        {/* Company name + tagline */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-          <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Company name</label>
-            <input
-              value={draft.companyName}
-              onChange={e => setDraft(d => ({ ...d, companyName: e.target.value }))}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-              placeholder="ACME Corp"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Logo initials (fallback)</label>
-            <input
-              value={draft.logoInitials}
-              onChange={e => setDraft(d => ({ ...d, logoInitials: e.target.value.slice(0, 3) }))}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-              placeholder="AC"
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Tagline</label>
-            <input
-              value={draft.tagline}
-              onChange={e => setDraft(d => ({ ...d, tagline: e.target.value }))}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-              placeholder="Smart Lighting Console · ACME Corp"
-            />
-          </div>
+          <div><label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Company name</label><input value={draft.companyName} onChange={e => setDraft(d => ({ ...d, companyName: e.target.value }))} className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400" placeholder="ACME Corp" /></div>
+          <div><label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Logo initials (fallback)</label><input value={draft.logoInitials} onChange={e => setDraft(d => ({ ...d, logoInitials: e.target.value.slice(0, 3) }))} className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400" placeholder="AC" /></div>
+          <div className="sm:col-span-2"><label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Tagline</label><input value={draft.tagline} onChange={e => setDraft(d => ({ ...d, tagline: e.target.value }))} className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400" placeholder="Smart Lighting Console · ACME Corp" /></div>
         </div>
-
-        {/* Accent color */}
         <div className="mb-4">
           <label className="text-xs text-slate-500 dark:text-slate-400 mb-2 block">Primary accent color</label>
           <div className="flex items-center gap-3 flex-wrap">
             {["#f59e0b", "#6366f1", "#10b981", "#ef4444", "#3b82f6", "#ec4899", "#8b5cf6", "#0ea5e9"].map(color => (
-              <button
-                key={color}
-                onClick={() => setDraft(d => ({ ...d, accentColor: color }))}
-                style={{ backgroundColor: color }}
-                className={cn(
-                  "w-7 h-7 rounded-full transition-transform hover:scale-110 border-2",
-                  draft.accentColor === color ? "border-white dark:border-slate-900 scale-110 shadow-md" : "border-transparent"
-                )}
-              />
+              <button key={color} onClick={() => setDraft(d => ({ ...d, accentColor: color }))} style={{ backgroundColor: color }} className={cn("w-7 h-7 rounded-full transition-transform hover:scale-110 border-2", draft.accentColor === color ? "border-white dark:border-slate-900 scale-110 shadow-md" : "border-transparent")} />
             ))}
             <div className="flex items-center gap-2 ml-1">
-              <input
-                type="color"
-                value={draft.accentColor}
-                onChange={e => setDraft(d => ({ ...d, accentColor: e.target.value }))}
-                className="w-7 h-7 rounded cursor-pointer border border-slate-200 dark:border-slate-700"
-                title="Custom color"
-              />
+              <input type="color" value={draft.accentColor} onChange={e => setDraft(d => ({ ...d, accentColor: e.target.value }))} className="w-7 h-7 rounded cursor-pointer border border-slate-200 dark:border-slate-700" title="Custom color" />
               <span className="text-xs text-slate-400 font-mono">{draft.accentColor}</span>
             </div>
           </div>
         </div>
-
-        {/* Logo upload */}
         <div className="mb-5">
           <label className="text-xs text-slate-500 dark:text-slate-400 mb-2 block">Logo (PNG or SVG)</label>
           <div className="flex items-center gap-3">
@@ -485,45 +927,17 @@ function SettingsPanel({
                 <img src={draft.logoUrl} alt="Logo preview" className="max-w-full max-h-full object-contain" />
               </div>
             ) : (
-              <div
-                className="w-12 h-12 rounded-xl flex items-center justify-center text-white text-sm font-bold shadow"
-                style={accentStyle}
-              >
-                {draft.logoInitials || "?"}
-              </div>
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white text-sm font-bold shadow" style={accentStyle}>{draft.logoInitials || "?"}</div>
             )}
             <div className="flex flex-col gap-1.5">
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-              >
-                <Upload size={12} /> Upload logo
-              </button>
-              {draft.logoUrl && (
-                <button
-                  onClick={() => setDraft(d => ({ ...d, logoUrl: "" }))}
-                  className="text-xs text-red-500 hover:text-red-400 font-medium"
-                >
-                  Remove
-                </button>
-              )}
+              <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"><Upload size={12} /> Upload logo</button>
+              {draft.logoUrl && <button onClick={() => setDraft(d => ({ ...d, logoUrl: "" }))} className="text-xs text-red-500 hover:text-red-400 font-medium">Remove</button>}
             </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/svg+xml,image/jpeg,image/webp"
-              className="hidden"
-              onChange={handleLogoFile}
-            />
+            <input ref={fileInputRef} type="file" accept="image/png,image/svg+xml,image/jpeg,image/webp" className="hidden" onChange={handleLogoFile} />
           </div>
         </div>
-
-        {/* Live preview */}
         <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-4 mb-5">
-          <div className="flex items-center gap-1.5 mb-3">
-            <Eye size={12} className="text-slate-400" />
-            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Sidebar preview</p>
-          </div>
+          <div className="flex items-center gap-1.5 mb-3"><Eye size={12} className="text-slate-400" /><p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Sidebar preview</p></div>
           <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-3 w-48">
             <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-slate-800 mb-3">
               {draft.logoUrl ? (
@@ -532,50 +946,22 @@ function SettingsPanel({
                   <img src={draft.logoUrl} alt="" className="max-w-full max-h-full object-contain" />
                 </div>
               ) : (
-                <div
-                  className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow"
-                  style={accentStyle}
-                >
-                  {draft.logoInitials || "?"}
-                </div>
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow" style={accentStyle}>{draft.logoInitials || "?"}</div>
               )}
               <span className="text-sm font-bold text-slate-900 dark:text-white truncate">{draft.companyName || "Your Brand"}</span>
             </div>
             {["Dashboard", "Buildings", "Settings"].map((item, i) => (
-              <div
-                key={item}
-                className={cn(
-                  "flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-medium mb-0.5",
-                  i === 0 ? "text-white" : "text-slate-500 dark:text-slate-400"
-                )}
-                style={i === 0 ? accentStyle : {}}
-              >
-                <div className="w-3 h-3 rounded bg-current opacity-60" />
-                {item}
+              <div key={item} className={cn("flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-medium mb-0.5", i === 0 ? "text-white" : "text-slate-500 dark:text-slate-400")} style={i === 0 ? accentStyle : {}}>
+                <div className="w-3 h-3 rounded bg-current opacity-60" />{item}
               </div>
             ))}
           </div>
         </div>
-
-        <button
-          onClick={applyBranding}
-          className={cn(
-            "px-5 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center gap-2",
-            brandingSaved ? "bg-green-500 text-white" : "text-white shadow"
-          )}
-          style={brandingSaved ? {} : accentStyle}
-        >
+        <button onClick={applyBranding} className={cn("px-5 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center gap-2", brandingSaved ? "bg-green-500 text-white" : "text-white shadow")} style={brandingSaved ? {} : accentStyle}>
           {brandingSaved ? <><CheckCircle2 size={15} /> Branding applied!</> : <><Palette size={15} /> Apply branding</>}
         </button>
       </div>
-
-      <button
-        onClick={save}
-        className={cn(
-          "px-6 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center gap-2",
-          saved ? "bg-green-500 text-white" : "bg-amber-500 hover:bg-amber-400 text-white shadow hover:shadow-amber-400/30"
-        )}
-      >
+      <button onClick={save} className={cn("px-6 py-2.5 text-sm font-semibold rounded-xl transition-all flex items-center gap-2", saved ? "bg-green-500 text-white" : "bg-amber-500 hover:bg-amber-400 text-white shadow hover:shadow-amber-400/30")}>
         {saved ? <><CheckCircle2 size={15} /> Saved!</> : "Save changes"}
       </button>
     </div>
@@ -585,90 +971,49 @@ function SettingsPanel({
 // ─── Intercom Integration Card ───────────────────────────────────────────────
 
 const INTERCOM_CONV_MAPPINGS = [
-  { source: "Conversation ID",      target: "LumiGlow Ticket ID",        status: "synced"  },
-  { source: "User Email",           target: "Contact Email",              status: "synced"  },
-  { source: "Conversation Body",    target: "Ticket Description",         status: "synced"  },
-  { source: "Assignee",             target: "Assigned Agent",             status: "synced"  },
-  { source: "Conversation State",   target: "Ticket Status",              status: "pending" },
-  { source: "Tags",                 target: "Ticket Labels",              status: "pending" },
+  { source: "Conversation ID",    target: "LumiGlow Ticket ID",  status: "synced"  },
+  { source: "User Email",         target: "Contact Email",        status: "synced"  },
+  { source: "Conversation Body",  target: "Ticket Description",   status: "synced"  },
+  { source: "Assignee",           target: "Assigned Agent",       status: "synced"  },
+  { source: "Conversation State", target: "Ticket Status",        status: "pending" },
+  { source: "Tags",               target: "Ticket Labels",        status: "pending" },
 ];
 
 const INTERCOM_SYNC_LOG = [
-  { ts: "Today 13:22",  event: "Conversation import completed",   count: "87 conversations", ok: true  },
-  { ts: "Today 09:00",  event: "Contact attributes synced",       count: "214 contacts",     ok: true  },
-  { ts: "Yesterday",    event: "OAuth token refreshed",           count: "",                 ok: true  },
-  { ts: "May 17",       event: "Webhook delivery – retry",        count: "3 retries",        ok: false },
+  { ts: "Today 13:22", event: "Conversation import completed", count: "87 conversations", ok: true  },
+  { ts: "Today 09:00", event: "Contact attributes synced",     count: "214 contacts",     ok: true  },
+  { ts: "Yesterday",   event: "OAuth token refreshed",         count: "",                 ok: true  },
+  { ts: "May 17",      event: "Webhook delivery – retry",      count: "3 retries",        ok: false },
 ];
 
 function IntercomIntegrationCard() {
-  const [icConnected, setIcConnected]           = useState(false);
-  const [icConnecting, setIcConnecting]         = useState(false);
-  const [icSyncConvs, setIcSyncConvs]           = useState(true);
-  const [icSyncContacts, setIcSyncContacts]     = useState(true);
-  const [icWebhook, setIcWebhook]               = useState(false);
-  const [icSyncFreq, setIcSyncFreq]             = useState("15");
-  const [icSyncing, setIcSyncing]               = useState(false);
-  const [icSyncToast, setIcSyncToast]           = useState(false);
+  const [icConnected, setIcConnected]       = useState(false);
+  const [icConnecting, setIcConnecting]     = useState(false);
+  const [icSyncConvs, setIcSyncConvs]       = useState(true);
+  const [icSyncContacts, setIcSyncContacts] = useState(true);
+  const [icWebhook, setIcWebhook]           = useState(false);
+  const [icSyncFreq, setIcSyncFreq]         = useState("15");
+  const [icSyncing, setIcSyncing]           = useState(false);
+  const [icSyncToast, setIcSyncToast]       = useState(false);
 
-  function handleIcConnect() {
-    setIcConnecting(true);
-    setTimeout(() => { setIcConnecting(false); setIcConnected(true); }, 1800);
-  }
-
-  function handleIcSync() {
-    setIcSyncing(true);
-    setTimeout(() => { setIcSyncing(false); setIcSyncToast(true); setTimeout(() => setIcSyncToast(false), 2500); }, 2000);
-  }
+  function handleIcConnect() { setIcConnecting(true); setTimeout(() => { setIcConnecting(false); setIcConnected(true); }, 1800); }
+  function handleIcSync() { setIcSyncing(true); setTimeout(() => { setIcSyncing(false); setIcSyncToast(true); setTimeout(() => setIcSyncToast(false), 2500); }, 2000); }
 
   return (
     <div className="space-y-6">
-      {/* ── Connection Card ── */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
         <div className="flex items-center gap-3 mb-5">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: "#1F8DED" }}>
-            <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2C6.477 2 2 6.477 2 12c0 1.97.57 3.804 1.555 5.348L2.25 21l3.75-1.281A9.956 9.956 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2Zm0 14.5c-2.485 0-4.5-2.015-4.5-4.5S9.515 7.5 12 7.5s4.5 2.015 4.5 4.5-2.015 4.5-4.5 4.5Z"/>
-            </svg>
+            <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.477 2 2 6.477 2 12c0 1.97.57 3.804 1.555 5.348L2.25 21l3.75-1.281A9.956 9.956 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2Zm0 14.5c-2.485 0-4.5-2.015-4.5-4.5S9.515 7.5 12 7.5s4.5 2.015 4.5 4.5-2.015 4.5-4.5 4.5Z"/></svg>
           </div>
-          <div className="flex-1">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Intercom</h3>
-            <p className="text-xs text-slate-400 dark:text-slate-500">Sync conversations &amp; customer support context</p>
-          </div>
-          {icConnected ? (
-            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2.5 py-1 rounded-full">
-              <CheckCircle2 size={11} /> Connected
-            </span>
-          ) : (
-            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full">
-              <AlertCircle size={11} /> Not connected
-            </span>
-          )}
+          <div className="flex-1"><h3 className="text-sm font-bold text-slate-900 dark:text-white">Intercom</h3><p className="text-xs text-slate-400 dark:text-slate-500">Sync conversations &amp; customer support context</p></div>
+          {icConnected ? <span className="flex items-center gap-1.5 text-[11px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2.5 py-1 rounded-full"><CheckCircle2 size={11} /> Connected</span> : <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full"><AlertCircle size={11} /> Not connected</span>}
         </div>
-
         {!icConnected ? (
           <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 p-4 mb-4">
-            <p className="text-xs text-slate-600 dark:text-slate-300 mb-3">
-              Connect your Intercom workspace to surface customer conversations directly in LumiGlow.
-              You&apos;ll be redirected to Intercom to authorise access via OAuth 2.0.
-            </p>
-            <ul className="space-y-1.5 mb-4">
-              {[
-                "Read & import Intercom conversations",
-                "Sync contact attributes & tags",
-                "Receive webhook events in real time",
-              ].map(s => (
-                <li key={s} className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                  <CheckCircle2 size={12} className="text-green-500 shrink-0" />
-                  {s}
-                </li>
-              ))}
-            </ul>
-            <button
-              onClick={handleIcConnect}
-              disabled={icConnecting}
-              className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition-all disabled:opacity-70"
-              style={{ background: icConnecting ? "#94a3b8" : "#1F8DED" }}
-            >
+            <p className="text-xs text-slate-600 dark:text-slate-300 mb-3">Connect your Intercom workspace to surface customer conversations directly in LumiGlow. You&apos;ll be redirected to Intercom to authorise access via OAuth 2.0.</p>
+            <ul className="space-y-1.5 mb-4">{["Read & import Intercom conversations", "Sync contact attributes & tags", "Receive webhook events in real time"].map(s => (<li key={s} className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400"><CheckCircle2 size={12} className="text-green-500 shrink-0" />{s}</li>))}</ul>
+            <button onClick={handleIcConnect} disabled={icConnecting} className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition-all disabled:opacity-70" style={{ background: icConnecting ? "#94a3b8" : "#1F8DED" }}>
               {icConnecting ? <><RefreshCw size={14} className="animate-spin" /> Connecting…</> : <><Link2 size={14} /> Connect Intercom</>}
             </button>
           </div>
@@ -676,392 +1021,146 @@ function IntercomIntegrationCard() {
           <div className="space-y-3">
             <div className="rounded-xl border border-blue-100 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/5 p-4 flex items-center gap-3">
               <Globe size={15} className="text-blue-500 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">acme-corp.intercom.com</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">OAuth token active · Workspace ID ic_w8x92</p>
-              </div>
-              <button
-                onClick={() => setIcConnected(false)}
-                className="text-[11px] text-red-500 hover:text-red-400 font-medium shrink-0"
-              >
-                Disconnect
-              </button>
+              <div className="flex-1 min-w-0"><p className="text-xs font-semibold text-slate-800 dark:text-slate-200">acme-corp.intercom.com</p><p className="text-[11px] text-slate-400 mt-0.5">OAuth token active · Workspace ID ic_w8x92</p></div>
+              <button onClick={() => setIcConnected(false)} className="text-[11px] text-red-500 hover:text-red-400 font-medium shrink-0">Disconnect</button>
             </div>
-            <button
-              onClick={handleIcSync}
-              disabled={icSyncing}
-              className="flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-60"
-            >
-              <RefreshCw size={13} className={icSyncing ? "animate-spin" : ""} />
-              {icSyncing ? "Syncing…" : "Sync now"}
+            <button onClick={handleIcSync} disabled={icSyncing} className="flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-60">
+              <RefreshCw size={13} className={icSyncing ? "animate-spin" : ""} />{icSyncing ? "Syncing…" : "Sync now"}
             </button>
           </div>
         )}
       </div>
-
-      {/* ── Sync Settings ── */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
-        <div className="flex items-center gap-2 mb-5">
-          <ArrowLeftRight size={15} className="text-blue-500" />
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Sync settings</h3>
-        </div>
+        <div className="flex items-center gap-2 mb-5"><ArrowLeftRight size={15} className="text-blue-500" /><h3 className="text-sm font-bold text-slate-900 dark:text-white">Sync settings</h3></div>
         {[
-          { label: "Conversation sync",  sub: "Import Intercom conversations as LumiGlow support tickets",  val: icSyncConvs,    set: setIcSyncConvs    },
-          { label: "Contact sync",       sub: "Pull Intercom contact attributes into customer profiles",     val: icSyncContacts,  set: setIcSyncContacts  },
-          { label: "Webhook events",     sub: "Receive real-time updates when conversations change state",   val: icWebhook,       set: setIcWebhook       },
+          { label: "Conversation sync", sub: "Import Intercom conversations as LumiGlow support tickets", val: icSyncConvs,    set: setIcSyncConvs    },
+          { label: "Contact sync",      sub: "Pull Intercom contact attributes into customer profiles",   val: icSyncContacts, set: setIcSyncContacts  },
+          { label: "Webhook events",    sub: "Receive real-time updates when conversations change state", val: icWebhook,      set: setIcWebhook       },
         ].map(row => (
           <div key={row.label} className="flex items-center justify-between py-3.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
-            <div>
-              <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{row.label}</p>
-              <p className="text-xs text-slate-400 dark:text-slate-500">{row.sub}</p>
-            </div>
-            <button
-              onClick={() => row.set(!row.val)}
-              className={cn("transition-colors shrink-0 ml-4", row.val ? "text-blue-500" : "text-slate-300 dark:text-slate-600")}
-            >
-              {row.val ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
-            </button>
+            <div><p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{row.label}</p><p className="text-xs text-slate-400 dark:text-slate-500">{row.sub}</p></div>
+            <button onClick={() => row.set(!row.val)} className={cn("transition-colors shrink-0 ml-4", row.val ? "text-blue-500" : "text-slate-300 dark:text-slate-600")}>{row.val ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}</button>
           </div>
         ))}
-        <div className="pt-4">
-          <label className="text-sm text-slate-800 dark:text-slate-200 font-medium block mb-1.5">Sync frequency</label>
-          <select
-            value={icSyncFreq}
-            onChange={e => setIcSyncFreq(e.target.value)}
-            className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-          >
-            <option value="5">Every 5 minutes</option>
-            <option value="15">Every 15 minutes</option>
-            <option value="60">Every hour</option>
-            <option value="360">Every 6 hours</option>
-            <option value="1440">Daily</option>
-          </select>
-        </div>
+        <div className="pt-4"><label className="text-sm text-slate-800 dark:text-slate-200 font-medium block mb-1.5">Sync frequency</label><select value={icSyncFreq} onChange={e => setIcSyncFreq(e.target.value)} className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-400"><option value="5">Every 5 minutes</option><option value="15">Every 15 minutes</option><option value="60">Every hour</option><option value="360">Every 6 hours</option><option value="1440">Daily</option></select></div>
       </div>
-
-      {/* ── Field Mapping ── */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
-        <div className="flex items-center gap-2 mb-5">
-          <Database size={15} className="text-blue-500" />
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Field mapping</h3>
-          <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500">Read-only</span>
-        </div>
+        <div className="flex items-center gap-2 mb-5"><Database size={15} className="text-blue-500" /><h3 className="text-sm font-bold text-slate-900 dark:text-white">Field mapping</h3><span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500">Read-only</span></div>
         <div className="overflow-x-auto -mx-1">
           <table className="w-full text-xs min-w-[400px]">
-            <thead>
-              <tr className="border-b border-slate-100 dark:border-slate-800">
-                <th className="text-left font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Intercom field</th>
-                <th className="text-center font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1 w-8">→</th>
-                <th className="text-left font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">LumiGlow field</th>
-                <th className="text-right font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {INTERCOM_CONV_MAPPINGS.map((m, i) => (
-                <tr key={i} className="border-b border-slate-50 dark:border-slate-800/60 last:border-0">
-                  <td className="py-2.5 px-1 text-slate-700 dark:text-slate-300 font-medium">{m.source}</td>
-                  <td className="py-2.5 px-1 text-center text-slate-300 dark:text-slate-600">→</td>
-                  <td className="py-2.5 px-1 text-slate-500 dark:text-slate-400">{m.target}</td>
-                  <td className="py-2.5 px-1 text-right">
-                    {m.status === "synced" ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-1.5 py-0.5 rounded-full">
-                        <CheckCircle2 size={9} /> synced
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/15 px-1.5 py-0.5 rounded-full">
-                        <Clock size={9} /> pending
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
+            <thead><tr className="border-b border-slate-100 dark:border-slate-800"><th className="text-left font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Intercom field</th><th className="text-center font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1 w-8">→</th><th className="text-left font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">LumiGlow field</th><th className="text-right font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Status</th></tr></thead>
+            <tbody>{INTERCOM_CONV_MAPPINGS.map((m, i) => (<tr key={i} className="border-b border-slate-50 dark:border-slate-800/60 last:border-0"><td className="py-2.5 px-1 text-slate-700 dark:text-slate-300 font-medium">{m.source}</td><td className="py-2.5 px-1 text-center text-slate-300 dark:text-slate-600">→</td><td className="py-2.5 px-1 text-slate-500 dark:text-slate-400">{m.target}</td><td className="py-2.5 px-1 text-right">{m.status === "synced" ? <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-1.5 py-0.5 rounded-full"><CheckCircle2 size={9} /> synced</span> : <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/15 px-1.5 py-0.5 rounded-full"><Clock size={9} /> pending</span>}</td></tr>))}</tbody>
           </table>
         </div>
       </div>
-
-      {/* ── Activity Log ── */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
-        <div className="flex items-center gap-2 mb-4">
-          <Clock size={15} className="text-blue-500" />
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Recent activity</h3>
-        </div>
-        <div className="space-y-2">
-          {INTERCOM_SYNC_LOG.map((l, i) => (
-            <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
-              {l.ok
-                ? <CheckCircle2 size={13} className="text-green-500 shrink-0" />
-                : <AlertCircle size={13} className="text-red-500 shrink-0" />
-              }
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{l.event}</p>
-                {l.count && <p className="text-[11px] text-slate-400 mt-0.5">{l.count}</p>}
-              </div>
-              <p className="text-[11px] text-slate-400 shrink-0">{l.ts}</p>
-            </div>
-          ))}
-        </div>
+        <div className="flex items-center gap-2 mb-4"><Clock size={15} className="text-blue-500" /><h3 className="text-sm font-bold text-slate-900 dark:text-white">Recent activity</h3></div>
+        <div className="space-y-2">{INTERCOM_SYNC_LOG.map((l, i) => (<div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">{l.ok ? <CheckCircle2 size={13} className="text-green-500 shrink-0" /> : <AlertCircle size={13} className="text-red-500 shrink-0" />}<div className="flex-1 min-w-0"><p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{l.event}</p>{l.count && <p className="text-[11px] text-slate-400 mt-0.5">{l.count}</p>}</div><p className="text-[11px] text-slate-400 shrink-0">{l.ts}</p></div>))}</div>
       </div>
-
-      {icSyncToast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-slate-900 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-xl">
-          <CheckCircle2 size={15} className="text-green-400 shrink-0" />
-          Intercom sync triggered successfully!
-        </div>
-      )}
+      {icSyncToast && <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-slate-900 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-xl"><CheckCircle2 size={15} className="text-green-400 shrink-0" /> Intercom sync triggered successfully!</div>}
     </div>
   );
 }
 
-// ─── HubSpot Integration Panel ───────────────────────────────────────────────
+// ─── HubSpot / Integrations Panel ────────────────────────────────────────────
 
 const FIELD_MAPPINGS = [
-  { source: "Zendesk Ticket ID",       target: "HubSpot Note ID",              status: "synced"  },
-  { source: "Ticket Subject",          target: "Note Title",                   status: "synced"  },
-  { source: "Ticket Body",             target: "Note Body",                    status: "synced"  },
-  { source: "Requester Email",         target: "Contact Email",                status: "synced"  },
-  { source: "Ticket Status",           target: "Activity Status",              status: "pending" },
-  { source: "HubSpot Contact Name",    target: "Zendesk Requester Name",       status: "synced"  },
-  { source: "HubSpot Lifecycle Stage", target: "Zendesk Custom Field",         status: "pending" },
+  { source: "Zendesk Ticket ID",       target: "HubSpot Note ID",        status: "synced"  },
+  { source: "Ticket Subject",          target: "Note Title",             status: "synced"  },
+  { source: "Ticket Body",             target: "Note Body",              status: "synced"  },
+  { source: "Requester Email",         target: "Contact Email",          status: "synced"  },
+  { source: "Ticket Status",           target: "Activity Status",        status: "pending" },
+  { source: "HubSpot Contact Name",    target: "Zendesk Requester Name", status: "synced"  },
+  { source: "HubSpot Lifecycle Stage", target: "Zendesk Custom Field",   status: "pending" },
 ];
 
 const SYNC_LOG = [
-  { ts: "Today 12:04",  event: "Contact sync completed",        count: "142 records", ok: true  },
-  { ts: "Today 08:00",  event: "Ticket batch sent to HubSpot",  count: "38 tickets",  ok: true  },
-  { ts: "Yesterday",    event: "OAuth token refreshed",         count: "",            ok: true  },
-  { ts: "May 16",       event: "Ticket sync – partial failure", count: "2 errors",    ok: false },
+  { ts: "Today 12:04", event: "Contact sync completed",        count: "142 records", ok: true  },
+  { ts: "Today 08:00", event: "Ticket batch sent to HubSpot",  count: "38 tickets",  ok: true  },
+  { ts: "Yesterday",   event: "OAuth token refreshed",         count: "",            ok: true  },
+  { ts: "May 16",      event: "Ticket sync – partial failure", count: "2 errors",    ok: false },
 ];
 
 function IntegrationsPanel() {
-  const [activeInteg, setActiveInteg]     = useState<"hubspot" | "intercom">("hubspot");
-  const [connected, setConnected]         = useState(false);
-  const [connecting, setConnecting]       = useState(false);
-  const [syncContacts, setSyncContacts]   = useState(true);
-  const [syncTickets, setSyncTickets]     = useState(true);
-  const [syncFreq, setSyncFreq]           = useState("15");
-  const [syncing, setSyncing]             = useState(false);
-  const [syncToast, setSyncToast]         = useState(false);
+  const [activeInteg, setActiveInteg] = useState<"hubspot" | "intercom">("hubspot");
+  const [connected, setConnected]     = useState(false);
+  const [connecting, setConnecting]   = useState(false);
+  const [syncContacts, setSyncContacts] = useState(true);
+  const [syncTickets, setSyncTickets]   = useState(true);
+  const [syncFreq, setSyncFreq]         = useState("15");
+  const [syncing, setSyncing]           = useState(false);
+  const [syncToast, setSyncToast]       = useState(false);
 
-  function handleConnect() {
-    setConnecting(true);
-    setTimeout(() => { setConnecting(false); setConnected(true); }, 1800);
-  }
-
-  function handleSync() {
-    setSyncing(true);
-    setTimeout(() => { setSyncing(false); setSyncToast(true); setTimeout(() => setSyncToast(false), 2500); }, 2000);
-  }
+  function handleConnect() { setConnecting(true); setTimeout(() => { setConnecting(false); setConnected(true); }, 1800); }
+  function handleSync() { setSyncing(true); setTimeout(() => { setSyncing(false); setSyncToast(true); setTimeout(() => setSyncToast(false), 2500); }, 2000); }
 
   return (
     <div className="max-w-2xl space-y-6">
-
-      {/* ── Integration Tabs ── */}
       <div className="flex gap-2 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/60 w-fit">
-        {([
-          { id: "hubspot",  label: "HubSpot",  dot: "#ff7a59" },
-          { id: "intercom", label: "Intercom", dot: "#1F8DED" },
-        ] as const).map(t => (
-          <button
-            key={t.id}
-            onClick={() => setActiveInteg(t.id)}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all",
-              activeInteg === t.id
-                ? "bg-white dark:bg-slate-900 shadow text-slate-900 dark:text-white"
-                : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
-            )}
-          >
-            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: t.dot }} />
-            {t.label}
+        {([{ id: "hubspot", label: "HubSpot", dot: "#ff7a59" }, { id: "intercom", label: "Intercom", dot: "#1F8DED" }] as const).map(t => (
+          <button key={t.id} onClick={() => setActiveInteg(t.id)} className={cn("flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all", activeInteg === t.id ? "bg-white dark:bg-slate-900 shadow text-slate-900 dark:text-white" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300")}>
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: t.dot }} />{t.label}
           </button>
         ))}
       </div>
-
       {activeInteg === "intercom" && <IntercomIntegrationCard />}
       {activeInteg === "hubspot" && <>
-
-      {/* ── Connection Card ── */}
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
-        <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: "#ff7a59" }}>
-            <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white" xmlns="http://www.w3.org/2000/svg">
-              <path d="M18.164 7.93V5.48a1.71 1.71 0 0 0 .987-1.543V3.9a1.712 1.712 0 0 0-3.424 0v.037a1.71 1.71 0 0 0 .987 1.543v2.45a4.86 4.86 0 0 0-2.31.898L8.29 4.61a1.9 1.9 0 1 0-.878.94l5.964 3.733a4.87 4.87 0 0 0-.734 2.591 4.874 4.874 0 0 0 .848 2.757l-1.813 1.813a1.56 1.56 0 0 0-.453-.073 1.573 1.573 0 1 0 1.573 1.573 1.556 1.556 0 0 0-.073-.453l1.79-1.79a4.9 4.9 0 1 0 3.65-7.771Zm0 7.8a2.574 2.574 0 1 1 0-5.148 2.574 2.574 0 0 1 0 5.148Z"/>
-            </svg>
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: "#ff7a59" }}>
+              <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white" xmlns="http://www.w3.org/2000/svg"><path d="M18.164 7.93V5.48a1.71 1.71 0 0 0 .987-1.543V3.9a1.712 1.712 0 0 0-3.424 0v.037a1.71 1.71 0 0 0 .987 1.543v2.45a4.86 4.86 0 0 0-2.31.898L8.29 4.61a1.9 1.9 0 1 0-.878.94l5.964 3.733a4.87 4.87 0 0 0-.734 2.591 4.874 4.874 0 0 0 .848 2.757l-1.813 1.813a1.56 1.56 0 0 0-.453-.073 1.573 1.573 0 1 0 1.573 1.573 1.556 1.556 0 0 0-.073-.453l1.79-1.79a4.9 4.9 0 1 0 3.65-7.771Zm0 7.8a2.574 2.574 0 1 1 0-5.148 2.574 2.574 0 0 1 0 5.148Z"/></svg>
+            </div>
+            <div className="flex-1"><h3 className="text-sm font-bold text-slate-900 dark:text-white">HubSpot CRM</h3><p className="text-xs text-slate-400 dark:text-slate-500">Sync contacts &amp; support tickets</p></div>
+            {connected ? <span className="flex items-center gap-1.5 text-[11px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2.5 py-1 rounded-full"><CheckCircle2 size={11} /> Connected</span> : <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full"><AlertCircle size={11} /> Not connected</span>}
           </div>
-          <div className="flex-1">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">HubSpot CRM</h3>
-            <p className="text-xs text-slate-400 dark:text-slate-500">Sync contacts &amp; support tickets</p>
-          </div>
-          {connected ? (
-            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2.5 py-1 rounded-full">
-              <CheckCircle2 size={11} /> Connected
-            </span>
-          ) : (
-            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full">
-              <AlertCircle size={11} /> Not connected
-            </span>
-          )}
-        </div>
-
-        {!connected ? (
-          <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 p-4 mb-4">
-            <p className="text-xs text-slate-600 dark:text-slate-300 mb-3">
-              Connect your HubSpot workspace to enable two-way sync of contacts and support tickets.
-              You&apos;ll be redirected to HubSpot to authorise access via OAuth 2.0.
-            </p>
-            <ul className="space-y-1.5 mb-4">
-              {["Read & write CRM contacts", "Create notes/activities from tickets", "Read contact lifecycle stage"].map(s => (
-                <li key={s} className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                  <CheckCircle2 size={12} className="text-green-500 shrink-0" />
-                  {s}
-                </li>
-              ))}
-            </ul>
-            <button
-              onClick={handleConnect}
-              disabled={connecting}
-              className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition-all disabled:opacity-70"
-              style={{ background: connecting ? "#94a3b8" : "#ff7a59" }}
-            >
-              {connecting ? <><RefreshCw size={14} className="animate-spin" /> Connecting…</> : <><Link2 size={14} /> Connect HubSpot</>}
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div className="rounded-xl border border-green-100 dark:border-green-500/20 bg-green-50 dark:bg-green-500/5 p-4 flex items-center gap-3">
-              <Globe size={15} className="text-green-500 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">acme-corp.hubspot.com</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">OAuth token active · Expires in 58 days</p>
-              </div>
-              <button
-                onClick={() => setConnected(false)}
-                className="text-[11px] text-red-500 hover:text-red-400 font-medium shrink-0"
-              >
-                Disconnect
+          {!connected ? (
+            <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 p-4 mb-4">
+              <p className="text-xs text-slate-600 dark:text-slate-300 mb-3">Connect your HubSpot workspace to enable two-way sync of contacts and support tickets. You&apos;ll be redirected to HubSpot to authorise access via OAuth 2.0.</p>
+              <ul className="space-y-1.5 mb-4">{["Read & write CRM contacts", "Create notes/activities from tickets", "Read contact lifecycle stage"].map(s => (<li key={s} className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400"><CheckCircle2 size={12} className="text-green-500 shrink-0" />{s}</li>))}</ul>
+              <button onClick={handleConnect} disabled={connecting} className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition-all disabled:opacity-70" style={{ background: connecting ? "#94a3b8" : "#ff7a59" }}>
+                {connecting ? <><RefreshCw size={14} className="animate-spin" /> Connecting…</> : <><Link2 size={14} /> Connect HubSpot</>}
               </button>
             </div>
-            <button
-              onClick={handleSync}
-              disabled={syncing}
-              className="flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-60"
-            >
-              <RefreshCw size={13} className={syncing ? "animate-spin" : ""} />
-              {syncing ? "Syncing…" : "Sync now"}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* ── Sync Settings ── */}
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
-        <div className="flex items-center gap-2 mb-5">
-          <ArrowLeftRight size={15} className="text-amber-500" />
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Sync settings</h3>
-        </div>
-        {[
-          { label: "Contact sync",     sub: "Pull HubSpot contacts into Zendesk requester profiles", val: syncContacts, set: setSyncContacts },
-          { label: "Ticket → HubSpot", sub: "Push Zendesk tickets as notes/activities on contacts",  val: syncTickets,  set: setSyncTickets  },
-        ].map(row => (
-          <div key={row.label} className="flex items-center justify-between py-3.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
-            <div>
-              <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{row.label}</p>
-              <p className="text-xs text-slate-400 dark:text-slate-500">{row.sub}</p>
-            </div>
-            <button
-              onClick={() => row.set(!row.val)}
-              className={cn("transition-colors shrink-0 ml-4", row.val ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}
-            >
-              {row.val ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
-            </button>
-          </div>
-        ))}
-        <div className="pt-4">
-          <label className="text-sm text-slate-800 dark:text-slate-200 font-medium block mb-1.5">Sync frequency</label>
-          <select
-            value={syncFreq}
-            onChange={e => setSyncFreq(e.target.value)}
-            className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-          >
-            <option value="5">Every 5 minutes</option>
-            <option value="15">Every 15 minutes</option>
-            <option value="60">Every hour</option>
-            <option value="360">Every 6 hours</option>
-            <option value="1440">Daily</option>
-          </select>
-        </div>
-      </div>
-
-      {/* ── Field Mapping ── */}
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
-        <div className="flex items-center gap-2 mb-5">
-          <Database size={15} className="text-amber-500" />
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Field mapping</h3>
-          <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500">Read-only</span>
-        </div>
-        <div className="overflow-x-auto -mx-1">
-          <table className="w-full text-xs min-w-[400px]">
-            <thead>
-              <tr className="border-b border-slate-100 dark:border-slate-800">
-                <th className="text-left font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Source field</th>
-                <th className="text-center font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1 w-8">→</th>
-                <th className="text-left font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Target field</th>
-                <th className="text-right font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {FIELD_MAPPINGS.map((m, i) => (
-                <tr key={i} className="border-b border-slate-50 dark:border-slate-800/60 last:border-0">
-                  <td className="py-2.5 px-1 text-slate-700 dark:text-slate-300 font-medium">{m.source}</td>
-                  <td className="py-2.5 px-1 text-center text-slate-300 dark:text-slate-600">→</td>
-                  <td className="py-2.5 px-1 text-slate-500 dark:text-slate-400">{m.target}</td>
-                  <td className="py-2.5 px-1 text-right">
-                    {m.status === "synced" ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-1.5 py-0.5 rounded-full">
-                        <CheckCircle2 size={9} /> synced
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/15 px-1.5 py-0.5 rounded-full">
-                        <Clock size={9} /> pending
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* ── Sync Activity Log ── */}
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
-        <div className="flex items-center gap-2 mb-4">
-          <Clock size={15} className="text-amber-500" />
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Recent activity</h3>
-        </div>
-        <div className="space-y-2">
-          {SYNC_LOG.map((l, i) => (
-            <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
-              {l.ok
-                ? <CheckCircle2 size={13} className="text-green-500 shrink-0" />
-                : <AlertCircle size={13} className="text-red-500 shrink-0" />
-              }
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{l.event}</p>
-                {l.count && <p className="text-[11px] text-slate-400 mt-0.5">{l.count}</p>}
+          ) : (
+            <div className="space-y-3">
+              <div className="rounded-xl border border-green-100 dark:border-green-500/20 bg-green-50 dark:bg-green-500/5 p-4 flex items-center gap-3">
+                <Globe size={15} className="text-green-500 shrink-0" />
+                <div className="flex-1 min-w-0"><p className="text-xs font-semibold text-slate-800 dark:text-slate-200">acme-corp.hubspot.com</p><p className="text-[11px] text-slate-400 mt-0.5">OAuth token active · Expires in 58 days</p></div>
+                <button onClick={() => setConnected(false)} className="text-[11px] text-red-500 hover:text-red-400 font-medium shrink-0">Disconnect</button>
               </div>
-              <p className="text-[11px] text-slate-400 shrink-0">{l.ts}</p>
+              <button onClick={handleSync} disabled={syncing} className="flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-60">
+                <RefreshCw size={13} className={syncing ? "animate-spin" : ""} />{syncing ? "Syncing…" : "Sync now"}
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-5"><ArrowLeftRight size={15} className="text-amber-500" /><h3 className="text-sm font-bold text-slate-900 dark:text-white">Sync settings</h3></div>
+          {[
+            { label: "Contact sync",     sub: "Pull HubSpot contacts into Zendesk requester profiles", val: syncContacts, set: setSyncContacts },
+            { label: "Ticket → HubSpot", sub: "Push Zendesk tickets as notes/activities on contacts",  val: syncTickets,  set: setSyncTickets  },
+          ].map(row => (
+            <div key={row.label} className="flex items-center justify-between py-3.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
+              <div><p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{row.label}</p><p className="text-xs text-slate-400 dark:text-slate-500">{row.sub}</p></div>
+              <button onClick={() => row.set(!row.val)} className={cn("transition-colors shrink-0 ml-4", row.val ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>{row.val ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}</button>
             </div>
           ))}
+          <div className="pt-4"><label className="text-sm text-slate-800 dark:text-slate-200 font-medium block mb-1.5">Sync frequency</label><select value={syncFreq} onChange={e => setSyncFreq(e.target.value)} className="px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"><option value="5">Every 5 minutes</option><option value="15">Every 15 minutes</option><option value="60">Every hour</option><option value="360">Every 6 hours</option><option value="1440">Daily</option></select></div>
         </div>
-      </div>
-
-      {syncToast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-slate-900 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-xl">
-          <CheckCircle2 size={15} className="text-green-400 shrink-0" />
-          Sync triggered successfully!
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-5"><Database size={15} className="text-amber-500" /><h3 className="text-sm font-bold text-slate-900 dark:text-white">Field mapping</h3><span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500">Read-only</span></div>
+          <div className="overflow-x-auto -mx-1">
+            <table className="w-full text-xs min-w-[400px]">
+              <thead><tr className="border-b border-slate-100 dark:border-slate-800"><th className="text-left font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Source field</th><th className="text-center font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1 w-8">→</th><th className="text-left font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Target field</th><th className="text-right font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Status</th></tr></thead>
+              <tbody>{FIELD_MAPPINGS.map((m, i) => (<tr key={i} className="border-b border-slate-50 dark:border-slate-800/60 last:border-0"><td className="py-2.5 px-1 text-slate-700 dark:text-slate-300 font-medium">{m.source}</td><td className="py-2.5 px-1 text-center text-slate-300 dark:text-slate-600">→</td><td className="py-2.5 px-1 text-slate-500 dark:text-slate-400">{m.target}</td><td className="py-2.5 px-1 text-right">{m.status === "synced" ? <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-1.5 py-0.5 rounded-full"><CheckCircle2 size={9} /> synced</span> : <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/15 px-1.5 py-0.5 rounded-full"><Clock size={9} /> pending</span>}</td></tr>))}</tbody>
+            </table>
+          </div>
         </div>
-      )}
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-4"><Clock size={15} className="text-amber-500" /><h3 className="text-sm font-bold text-slate-900 dark:text-white">Recent activity</h3></div>
+          <div className="space-y-2">{SYNC_LOG.map((l, i) => (<div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">{l.ok ? <CheckCircle2 size={13} className="text-green-500 shrink-0" /> : <AlertCircle size={13} className="text-red-500 shrink-0" />}<div className="flex-1 min-w-0"><p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{l.event}</p>{l.count && <p className="text-[11px] text-slate-400 mt-0.5">{l.count}</p>}</div><p className="text-[11px] text-slate-400 shrink-0">{l.ts}</p></div>))}</div>
+        </div>
+        {syncToast && <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-slate-900 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-xl"><CheckCircle2 size={15} className="text-green-400 shrink-0" /> Sync triggered successfully!</div>}
       </>}
     </div>
   );
@@ -1090,17 +1189,12 @@ export default function DashboardPage() {
   const [reportToast, setReportToast] = useState<string | null>(null);
   const [branding, setBranding] = useState<BrandingConfig>(DEFAULT_BRANDING);
 
-  // Zone interactions
   const toggleZone = useCallback((zoneId: string) => {
     setBuildings(prev => prev.map(b => ({
       ...b,
       floors: b.floors.map(f => ({
         ...f,
-        zones: f.zones.map(z =>
-          z.id === zoneId
-            ? { ...z, isOn: !z.isOn, powerWatts: z.isOn ? 0 : Math.round(100 + Math.random() * 400), brightness: z.isOn ? 0 : 75 }
-            : z
-        ),
+        zones: f.zones.map(z => z.id === zoneId ? { ...z, isOn: !z.isOn, powerWatts: z.isOn ? 0 : Math.round(100 + Math.random() * 400), brightness: z.isOn ? 0 : 75 } : z),
       })),
     })));
   }, []);
@@ -1110,29 +1204,15 @@ export default function DashboardPage() {
       ...b,
       floors: b.floors.map(f => ({
         ...f,
-        zones: f.zones.map(z =>
-          z.id === zoneId
-            ? { ...z, brightness: val, powerWatts: z.isOn ? Math.round((val / 100) * 800) : 0 }
-            : z
-        ),
+        zones: f.zones.map(z => z.id === zoneId ? { ...z, brightness: val, powerWatts: z.isOn ? Math.round((val / 100) * 800) : 0 } : z),
       })),
     })));
   }, []);
 
-  const dismissAlert = useCallback((id: string) => {
-    setAlertList(prev => prev.filter(a => a.id !== id));
-  }, []);
+  const dismissAlert = useCallback((id: string) => { setAlertList(prev => prev.filter(a => a.id !== id)); }, []);
+  const toggleBuildingExpand = useCallback((id: string) => { setExpandedBuildings(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]); }, []);
 
-  const toggleBuildingExpand = useCallback((id: string) => {
-    setExpandedBuildings(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    );
-  }, []);
-
-  // Derived stats
   const watts = totalWatts(buildings);
-  const kwhEst = ((watts / 1000) * 8).toFixed(1);
-  const savings = 31;
 
   const navItems: { id: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: "overview",     label: "Overview",     icon: <LayoutDashboard size={17} /> },
@@ -1146,11 +1226,7 @@ export default function DashboardPage() {
 
   const filteredZones = buildings
     .flatMap(b => b.floors.flatMap(f => f.zones.map(z => ({ ...z, buildingName: b.name, floorName: f.name }))))
-    .filter(z =>
-      searchQ === "" ||
-      z.name.toLowerCase().includes(searchQ.toLowerCase()) ||
-      z.buildingName.toLowerCase().includes(searchQ.toLowerCase())
-    );
+    .filter(z => searchQ === "" || z.name.toLowerCase().includes(searchQ.toLowerCase()) || z.buildingName.toLowerCase().includes(searchQ.toLowerCase()));
 
   return (
     <div className="flex h-screen bg-slate-100 dark:bg-slate-950 overflow-hidden font-sans">
@@ -1161,7 +1237,6 @@ export default function DashboardPage() {
         "md:relative md:translate-x-0",
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
-        {/* Logo */}
         <div className="h-16 flex items-center gap-2.5 px-5 border-b border-slate-100 dark:border-slate-800 shrink-0">
           {branding.logoUrl ? (
             <div className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex items-center justify-center overflow-hidden shrink-0">
@@ -1169,310 +1244,108 @@ export default function DashboardPage() {
               <img src={branding.logoUrl} alt="Logo" className="max-w-full max-h-full object-contain" />
             </div>
           ) : (
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center shadow shrink-0"
-              style={{ background: `linear-gradient(135deg, ${branding.accentColor}cc, ${branding.accentColor})` }}
-            >
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow shrink-0" style={{ background: `linear-gradient(135deg, ${branding.accentColor}cc, ${branding.accentColor})` }}>
               <span className="text-white text-[11px] font-bold">{branding.logoInitials}</span>
             </div>
           )}
-          <span className="text-base font-bold tracking-tight text-slate-900 dark:text-white truncate">
-            {branding.companyName}
-          </span>
+          <span className="text-base font-bold tracking-tight text-slate-900 dark:text-white truncate">{branding.companyName}</span>
         </div>
-
-        {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-3 px-3">
           {navItems.map(item => (
-            <button
-              key={item.id}
-              onClick={() => { setTab(item.id); setSidebarOpen(false); }}
-              className={cn(
-                "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all mb-0.5 text-left",
-                tab === item.id
-                  ? "text-white"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
-              )}
+            <button key={item.id} onClick={() => { setTab(item.id); setSidebarOpen(false); }}
+              className={cn("w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all mb-0.5 text-left", tab === item.id ? "text-white" : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white")}
               style={tab === item.id ? { backgroundColor: branding.accentColor } : {}}
             >
-              {item.icon}
-              <span className="flex-1">{item.label}</span>
-              {item.badge != null && item.badge > 0 && (
-                <span className="bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
-                  {item.badge}
-                </span>
-              )}
+              {item.icon}<span className="flex-1">{item.label}</span>
+              {item.badge != null && item.badge > 0 && <span className="bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{item.badge}</span>}
             </button>
           ))}
         </nav>
-
-        {/* User footer */}
         <div className="p-3 border-t border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
-              JD
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">Jordan Davis</p>
-              <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">Facility Manager</p>
-            </div>
-            <Link href="/" aria-label="Sign out" className="text-slate-400 hover:text-red-500 transition-colors">
-              <LogOut size={14} />
-            </Link>
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-xs font-bold shrink-0">JD</div>
+            <div className="flex-1 min-w-0"><p className="text-xs font-semibold text-slate-900 dark:text-white truncate">Jordan Davis</p><p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">Facility Manager</p></div>
+            <Link href="/" aria-label="Sign out" className="text-slate-400 hover:text-red-500 transition-colors"><LogOut size={14} /></Link>
           </div>
         </div>
       </aside>
 
-      {/* Sidebar overlay on mobile */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-30 bg-black/40 md:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+      {sidebarOpen && <div className="fixed inset-0 z-30 bg-black/40 md:hidden" onClick={() => setSidebarOpen(false)} />}
 
       {/* ── Main ── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-
-        {/* Top bar */}
         <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3 px-4 sm:px-6 shrink-0 z-20">
-          <button
-            className="md:hidden p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
-            onClick={() => setSidebarOpen(true)}
-          >
-            <Menu size={20} />
-          </button>
-
+          <button className="md:hidden p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button>
           <div>
             <h1 className="text-sm font-bold text-slate-900 dark:text-white capitalize">{tab}</h1>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:block">
-              {branding.tagline}
-            </p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:block">{branding.tagline}</p>
           </div>
-
           <div className="flex-1" />
-
-          {/* Search */}
           <div className="hidden sm:flex items-center gap-2 bg-slate-100 dark:bg-slate-800 rounded-xl px-3 py-2 w-48">
             <Search size={13} className="text-slate-400 shrink-0" />
-            <input
-              value={searchQ}
-              onChange={e => setSearchQ(e.target.value)}
-              placeholder="Search zones…"
-              className="bg-transparent text-xs text-slate-700 dark:text-slate-300 placeholder-slate-400 outline-none w-full"
-            />
+            <input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="Search zones…" className="bg-transparent text-xs text-slate-700 dark:text-slate-300 placeholder-slate-400 outline-none w-full" />
           </div>
-
-          {/* Theme toggle */}
           <ThemeToggle />
-
-          {/* Notification bell */}
-          <button
-            onClick={() => setTab("alerts")}
-            className="relative p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
-          >
+          <button onClick={() => setTab("alerts")} className="relative p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors">
             <Bell size={17} />
-            {alertList.some(a => a.severity === "critical") && (
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
-            )}
+            {alertList.some(a => a.severity === "critical") && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />}
           </button>
         </header>
 
-        {/* Content */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">
 
-          {/* ── OVERVIEW ── */}
+          {/* ── OVERVIEW (Personalized Dashboard) ── */}
           {tab === "overview" && (
-            <div className="space-y-6">
-              {/* KPIs */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <KpiCard
-                  label="Buildings online"
-                  value={String(buildings.length)}
-                  sub="All systems normal"
-                  icon={<Building2 size={18} className="text-sky-600 dark:text-sky-400" />}
-                  accent="bg-sky-100 dark:bg-sky-500/20"
-                />
-                <KpiCard
-                  label="Zones active"
-                  value={`${zonesOn(buildings)} / ${totalZones(buildings)}`}
-                  sub="Across all floors"
-                  icon={<Zap size={18} className="text-amber-600 dark:text-amber-400" />}
-                  accent="bg-amber-100 dark:bg-amber-500/20"
-                />
-                <KpiCard
-                  label="Live power draw"
-                  value={`${(watts / 1000).toFixed(1)} kW`}
-                  sub={`~${kwhEst} kWh est. today`}
-                  icon={<Activity size={18} className="text-violet-600 dark:text-violet-400" />}
-                  accent="bg-violet-100 dark:bg-violet-500/20"
-                />
-                <KpiCard
-                  label="Energy savings"
-                  value={`${savings}%`}
-                  sub="vs. last-year baseline"
-                  icon={<TrendingDown size={18} className="text-green-600 dark:text-green-400" />}
-                  accent="bg-green-100 dark:bg-green-500/20"
-                />
-              </div>
-
-              {/* Chart */}
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h2 className="text-sm font-bold text-slate-900 dark:text-white">Energy usage today</h2>
-                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">All buildings · kWh per hour</p>
-                  </div>
-                  <span className="text-xs font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2.5 py-1 rounded-full">
-                    ↓ {savings}% vs baseline
-                  </span>
-                </div>
-                <EnergyChart />
-              </div>
-
-              {/* Alerts preview & buildings summary */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* Recent alerts */}
-                <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-sm font-bold text-slate-900 dark:text-white">Recent alerts</h2>
-                    <button onClick={() => setTab("alerts")} className="text-xs text-amber-500 hover:text-amber-400 font-semibold">
-                      View all →
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {alertList.slice(0, 4).map(a => (
-                      <div key={a.id} className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
-                        <AlertBadge severity={a.severity} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs text-slate-700 dark:text-slate-300 font-medium truncate">{a.message}</p>
-                          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{a.zone} · {a.ts}</p>
-                        </div>
-                      </div>
-                    ))}
-                    {alertList.length === 0 && (
-                      <p className="text-sm text-slate-400 text-center py-4">All clear 🎉</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Buildings summary */}
-                <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-sm font-bold text-slate-900 dark:text-white">Buildings</h2>
-                    <button onClick={() => setTab("buildings")} className="text-xs text-amber-500 hover:text-amber-400 font-semibold">
-                      Manage →
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {buildings.map(b => {
-                      const bZones = b.floors.flatMap(f => f.zones);
-                      const on = bZones.filter(z => z.isOn).length;
-                      const bWatts = bZones.reduce((s, z) => s + z.powerWatts, 0);
-                      return (
-                        <div key={b.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
-                          <Building2 size={15} className="text-slate-400 shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{b.name}</p>
-                            <p className="text-[11px] text-slate-400 dark:text-slate-500">{b.location}</p>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <p className="text-xs font-bold text-slate-800 dark:text-white">{on}/{bZones.length} on</p>
-                            <p className="text-[11px] text-slate-400">{(bWatts / 1000).toFixed(1)} kW</p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </div>
+            <PersonalizedDashboard
+              buildings={buildings}
+              alertList={alertList}
+              onSetTab={setTab}
+              accentColor={branding.accentColor}
+            />
           )}
 
           {/* ── BUILDINGS ── */}
           {tab === "buildings" && (
             <div className="space-y-4">
               <div className="flex items-center gap-3 flex-wrap">
-                <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-                  {buildings.length} buildings · {totalZones(buildings)} zones · {zonesOn(buildings)} on
-                </h2>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">{buildings.length} buildings · {totalZones(buildings)} zones · {zonesOn(buildings)} on</h2>
                 <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 ml-auto">
                   <Search size={12} className="text-slate-400 shrink-0" />
-                  <input
-                    value={searchQ}
-                    onChange={e => setSearchQ(e.target.value)}
-                    placeholder="Search zones…"
-                    className="bg-transparent text-xs text-slate-700 dark:text-slate-300 placeholder-slate-400 outline-none w-36"
-                  />
-                  {searchQ && (
-                    <button onClick={() => setSearchQ("")} className="text-slate-400 hover:text-slate-600">
-                      <X size={11} />
-                    </button>
-                  )}
+                  <input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="Search zones…" className="bg-transparent text-xs text-slate-700 dark:text-slate-300 placeholder-slate-400 outline-none w-36" />
+                  {searchQ && <button onClick={() => setSearchQ("")} className="text-slate-400 hover:text-slate-600"><X size={11} /></button>}
                 </div>
               </div>
-
               {searchQ ? (
                 <div className="space-y-2">
-                  {filteredZones.length === 0 && (
-                    <p className="text-sm text-slate-400 text-center py-8">No zones match "{searchQ}"</p>
-                  )}
-                  {filteredZones.map(z => (
-                    <div key={z.id}>
-                      <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-1 px-1">{z.buildingName} · {z.floorName}</p>
-                      <ZoneRow zone={z} onToggle={toggleZone} onBrightness={setBrightness} />
-                    </div>
-                  ))}
+                  {filteredZones.length === 0 && <p className="text-sm text-slate-400 text-center py-8">No zones match &ldquo;{searchQ}&rdquo;</p>}
+                  {filteredZones.map(z => (<div key={z.id}><p className="text-[11px] text-slate-400 dark:text-slate-500 mb-1 px-1">{z.buildingName} · {z.floorName}</p><ZoneRow zone={z} onToggle={toggleZone} onBrightness={setBrightness} /></div>))}
                 </div>
-              ) : (
-                buildings.map(b => {
-                  const isExp = expandedBuildings.includes(b.id);
-                  const bZones = b.floors.flatMap(f => f.zones);
-                  const on = bZones.filter(z => z.isOn).length;
-                  const bWatts = bZones.reduce((s, z) => s + z.powerWatts, 0);
-                  return (
-                    <div key={b.id} className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
-                      <button
-                        onClick={() => toggleBuildingExpand(b.id)}
-                        className="w-full flex items-center gap-4 px-5 py-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors text-left"
-                      >
-                        <Building2 size={18} className="text-amber-500 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-slate-900 dark:text-white">{b.name}</p>
-                          <p className="text-xs text-slate-400 dark:text-slate-500">
-                            {b.location} · {b.floors.length} floor{b.floors.length > 1 ? "s" : ""}
-                          </p>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className="text-xs font-bold text-slate-800 dark:text-white">{on}/{bZones.length} zones on</p>
-                          <p className="text-[11px] text-slate-400">{(bWatts / 1000).toFixed(1)} kW live</p>
-                        </div>
-                        {isExp
-                          ? <ChevronUp size={16} className="text-slate-400 shrink-0" />
-                          : <ChevronDown size={16} className="text-slate-400 shrink-0" />
-                        }
-                      </button>
-
-                      {isExp && (
-                        <div className="border-t border-slate-100 dark:border-slate-800 px-5 pb-4 space-y-4 pt-3">
-                          {b.floors.map(f => (
-                            <div key={f.id}>
-                              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                                {f.name}
-                              </p>
-                              <div className="space-y-2">
-                                {f.zones.map(z => (
-                                  <ZoneRow key={z.id} zone={z} onToggle={toggleZone} onBrightness={setBrightness} />
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
+              ) : buildings.map(b => {
+                const isExp = expandedBuildings.includes(b.id);
+                const bZones = b.floors.flatMap(f => f.zones);
+                const on = bZones.filter(z => z.isOn).length;
+                const bWatts = bZones.reduce((s, z) => s + z.powerWatts, 0);
+                return (
+                  <div key={b.id} className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+                    <button onClick={() => toggleBuildingExpand(b.id)} className="w-full flex items-center gap-4 px-5 py-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors text-left">
+                      <Building2 size={18} className="text-amber-500 shrink-0" />
+                      <div className="flex-1 min-w-0"><p className="text-sm font-bold text-slate-900 dark:text-white">{b.name}</p><p className="text-xs text-slate-400 dark:text-slate-500">{b.location} · {b.floors.length} floor{b.floors.length > 1 ? "s" : ""}</p></div>
+                      <div className="text-right shrink-0"><p className="text-xs font-bold text-slate-800 dark:text-white">{on}/{bZones.length} zones on</p><p className="text-[11px] text-slate-400">{(bWatts / 1000).toFixed(1)} kW live</p></div>
+                      {isExp ? <ChevronUp size={16} className="text-slate-400 shrink-0" /> : <ChevronDown size={16} className="text-slate-400 shrink-0" />}
+                    </button>
+                    {isExp && (
+                      <div className="border-t border-slate-100 dark:border-slate-800 px-5 pb-4 space-y-4 pt-3">
+                        {b.floors.map(f => (
+                          <div key={f.id}>
+                            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">{f.name}</p>
+                            <div className="space-y-2">{f.zones.map(z => <ZoneRow key={z.id} zone={z} onToggle={toggleZone} onBrightness={setBrightness} />)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -1480,19 +1353,9 @@ export default function DashboardPage() {
           {tab === "alerts" && (
             <div className="space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
-                <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-                  {alertList.length} active alert{alertList.length !== 1 ? "s" : ""}
-                </h2>
-                {alertList.length > 0 && (
-                  <button
-                    onClick={() => setAlertList([])}
-                    className="text-xs text-slate-500 hover:text-red-500 font-medium transition-colors"
-                  >
-                    Dismiss all
-                  </button>
-                )}
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">{alertList.length} active alert{alertList.length !== 1 ? "s" : ""}</h2>
+                {alertList.length > 0 && <button onClick={() => setAlertList([])} className="text-xs text-slate-500 hover:text-red-500 font-medium transition-colors">Dismiss all</button>}
               </div>
-
               {alertList.length === 0 && (
                 <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-12 text-center shadow-sm">
                   <CheckCircle2 size={32} className="text-green-500 mx-auto mb-3" />
@@ -1500,35 +1363,18 @@ export default function DashboardPage() {
                   <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">No active alerts across your portfolio.</p>
                 </div>
               )}
-
               {(["critical", "warning", "info"] as Alert["severity"][]).map(sev => {
                 const group = alertList.filter(a => a.severity === sev);
                 if (group.length === 0) return null;
                 return (
                   <div key={sev}>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2 px-1">
-                      {sev === "critical" ? "🔴" : sev === "warning" ? "🟡" : "🔵"} {sev}
-                    </p>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2 px-1">{sev === "critical" ? "🔴" : sev === "warning" ? "🟡" : "🔵"} {sev}</p>
                     <div className="space-y-2">
                       {group.map(a => (
-                        <div key={a.id} className={cn(
-                          "flex items-start gap-4 p-4 rounded-2xl border shadow-sm",
-                          a.severity === "critical" ? "bg-red-50 dark:bg-red-500/5 border-red-200/60 dark:border-red-500/20" :
-                          a.severity === "warning"  ? "bg-amber-50 dark:bg-amber-500/5 border-amber-200/60 dark:border-amber-500/20" :
-                          "bg-sky-50 dark:bg-sky-500/5 border-sky-200/60 dark:border-sky-500/20"
-                        )}>
+                        <div key={a.id} className={cn("flex items-start gap-4 p-4 rounded-2xl border shadow-sm", a.severity === "critical" ? "bg-red-50 dark:bg-red-500/5 border-red-200/60 dark:border-red-500/20" : a.severity === "warning" ? "bg-amber-50 dark:bg-amber-500/5 border-amber-200/60 dark:border-amber-500/20" : "bg-sky-50 dark:bg-sky-500/5 border-sky-200/60 dark:border-sky-500/20")}>
                           <AlertBadge severity={a.severity} />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{a.message}</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{a.zone} · {a.ts}</p>
-                          </div>
-                          <button
-                            onClick={() => dismissAlert(a.id)}
-                            className="text-slate-400 hover:text-red-500 transition-colors shrink-0"
-                            aria-label="Dismiss"
-                          >
-                            <X size={14} />
-                          </button>
+                          <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{a.message}</p><p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{a.zone} · {a.ts}</p></div>
+                          <button onClick={() => dismissAlert(a.id)} className="text-slate-400 hover:text-red-500 transition-colors shrink-0" aria-label="Dismiss"><X size={14} /></button>
                         </div>
                       ))}
                     </div>
@@ -1544,27 +1390,11 @@ export default function DashboardPage() {
               <h2 className="text-sm font-bold text-slate-900 dark:text-white">{schedules.length} lighting schedules</h2>
               <div className="space-y-2">
                 {schedules.map(s => (
-                  <div key={s.id} className={cn(
-                    "flex items-center gap-4 p-4 rounded-2xl border shadow-sm bg-white dark:bg-slate-900 transition-all",
-                    scheduleActive[s.id] ? "border-slate-200 dark:border-slate-700/60" : "opacity-60 border-slate-100 dark:border-slate-800"
-                  )}>
+                  <div key={s.id} className={cn("flex items-center gap-4 p-4 rounded-2xl border shadow-sm bg-white dark:bg-slate-900 transition-all", scheduleActive[s.id] ? "border-slate-200 dark:border-slate-700/60" : "opacity-60 border-slate-100 dark:border-slate-800")}>
                     <Calendar size={16} className={scheduleActive[s.id] ? "text-amber-500 shrink-0" : "text-slate-300 dark:text-slate-600 shrink-0"} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{s.name}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{s.scope} · {s.time}</p>
-                    </div>
-                    <span className={cn(
-                      "shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full",
-                      s.mode === "auto"    ? "bg-sky-100 text-sky-600 dark:bg-sky-500/20 dark:text-sky-400" :
-                      s.mode === "manual"  ? "bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-400" :
-                      "bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400"
-                    )}>{s.mode}</span>
-                    <button
-                      onClick={() => setScheduleActive(prev => ({ ...prev, [s.id]: !prev[s.id] }))}
-                      className={cn("shrink-0 transition-colors", scheduleActive[s.id] ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}
-                    >
-                      {scheduleActive[s.id] ? <ToggleRight size={26} /> : <ToggleLeft size={26} />}
-                    </button>
+                    <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{s.name}</p><p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{s.scope} · {s.time}</p></div>
+                    <span className={cn("shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full", s.mode === "auto" ? "bg-sky-100 text-sky-600 dark:bg-sky-500/20 dark:text-sky-400" : s.mode === "manual" ? "bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-400" : "bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400")}>{s.mode}</span>
+                    <button onClick={() => setScheduleActive(prev => ({ ...prev, [s.id]: !prev[s.id] }))} className={cn("shrink-0 transition-colors", scheduleActive[s.id] ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>{scheduleActive[s.id] ? <ToggleRight size={26} /> : <ToggleLeft size={26} />}</button>
                   </div>
                 ))}
               </div>
@@ -1575,7 +1405,6 @@ export default function DashboardPage() {
           {tab === "reports" && (
             <div className="space-y-4">
               <h2 className="text-sm font-bold text-slate-900 dark:text-white">Generated reports</h2>
-
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
                   { label: "Avg daily kWh", value: "82.4", icon: <Activity size={14} className="text-amber-500" /> },
@@ -1585,14 +1414,10 @@ export default function DashboardPage() {
                 ].map(s => (
                   <div key={s.label} className="rounded-xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-3 shadow-sm flex items-center gap-2.5">
                     <div className="shrink-0">{s.icon}</div>
-                    <div>
-                      <p className="text-[10px] text-slate-400 dark:text-slate-500">{s.label}</p>
-                      <p className="text-sm font-bold text-slate-900 dark:text-white">{s.value}</p>
-                    </div>
+                    <div><p className="text-[10px] text-slate-400 dark:text-slate-500">{s.label}</p><p className="text-sm font-bold text-slate-900 dark:text-white">{s.value}</p></div>
                   </div>
                 ))}
               </div>
-
               <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
@@ -1606,24 +1431,13 @@ export default function DashboardPage() {
                   </thead>
                   <tbody>
                     {reports.map((r, i) => (
-                      <tr key={r.id} className={cn(
-                        "border-b border-slate-50 dark:border-slate-800/80 last:border-0",
-                        i % 2 !== 0 && "bg-slate-50/50 dark:bg-slate-800/20"
-                      )}>
+                      <tr key={r.id} className={cn("border-b border-slate-50 dark:border-slate-800/80 last:border-0", i % 2 !== 0 && "bg-slate-50/50 dark:bg-slate-800/20")}>
                         <td className="px-5 py-3 text-sm font-medium text-slate-800 dark:text-slate-200 whitespace-nowrap">{r.name}</td>
                         <td className="px-3 py-3 text-xs text-slate-500 dark:text-slate-400 hidden sm:table-cell">{r.scope}</td>
                         <td className="px-3 py-3 text-xs text-slate-400 hidden md:table-cell">{r.generated}</td>
                         <td className="px-3 py-3 text-xs text-slate-400 hidden md:table-cell">{r.size}</td>
                         <td className="px-5 py-3 text-right">
-                          <button
-                            onClick={() => {
-                              setReportToast(`Downloading "${r.name}"…`);
-                              setTimeout(() => setReportToast(null), 2500);
-                            }}
-                            className="text-xs font-semibold text-amber-500 hover:text-amber-400 transition-colors"
-                          >
-                            Download
-                          </button>
+                          <button onClick={() => { setReportToast(`Downloading "${r.name}"…`); setTimeout(() => setReportToast(null), 2500); }} className="text-xs font-semibold text-amber-500 hover:text-amber-400 transition-colors">Download</button>
                         </td>
                       </tr>
                     ))}
@@ -1633,23 +1447,17 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* ── INTEGRATIONS ── */}
           {tab === "integrations" && <IntegrationsPanel />}
-
-          {/* ── SETTINGS ── */}
           {tab === "settings" && <SettingsPanel branding={branding} onBrandingChange={setBranding} />}
 
         </main>
       </div>
 
-      {/* Toast */}
       {reportToast && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-slate-900 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-xl animate-fade-in">
           <CheckCircle2 size={15} className="text-green-400 shrink-0" />
           {reportToast}
-          <button onClick={() => setReportToast(null)} className="ml-2 text-slate-400 hover:text-white">
-            <X size={13} />
-          </button>
+          <button onClick={() => setReportToast(null)} className="ml-2 text-slate-400 hover:text-white"><X size={13} /></button>
         </div>
       )}
     </div>
