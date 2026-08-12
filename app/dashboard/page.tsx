@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
 import {
   Zap, LayoutDashboard, Building2, Bell, Calendar,
@@ -10,6 +10,8 @@ import {
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
   Palette, Upload, Eye, Plug, RefreshCw, ArrowLeftRight,
   Database, Globe, Link2, AlertCircle, Clock,
+  ScrollText, Download, FileJson, FileText, RotateCcw, Loader2,
+  Filter, ChevronLast, PackageCheck, Ban,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -24,7 +26,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings" | "integrations";
+type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "logs" | "settings" | "integrations";
 
 interface BrandingConfig {
   companyName: string;
@@ -1067,6 +1069,339 @@ function IntegrationsPanel() {
   );
 }
 
+// ─── Logs Panel ───────────────────────────────────────────────────────────────
+
+type ExportStatus = "queued" | "processing" | "completed" | "failed";
+
+interface ExportJob {
+  id: string;
+  scope: string;
+  format: "csv" | "json";
+  dateRange: string;
+  status: ExportStatus;
+  progress: number;
+  createdAt: string;
+  completedAt?: string;
+  errorMsg?: string;
+  fileSize?: string;
+}
+
+const MOCK_LOG_ENTRIES = [
+  { ts: "2025-08-11 23:58:12", level: "INFO",  building: "HQ Tower",    message: "Zone North-East Office dimmed to 40% by schedule." },
+  { ts: "2025-08-11 23:51:07", level: "WARN",  building: "West Campus",  message: "Sensor offline – Zone B2-Lobby: heartbeat timeout." },
+  { ts: "2025-08-11 23:44:33", level: "INFO",  building: "HQ Tower",    message: "Lighting group 'Floor 3' turned off (business-hours schedule)." },
+  { ts: "2025-08-11 23:39:22", level: "ERROR", building: "EMEA Office",  message: "Firmware update failed on device LM-4812: connection reset." },
+  { ts: "2025-08-11 23:31:18", level: "INFO",  building: "West Campus",  message: "Manual override applied to Zone Lobby by Jordan Davis." },
+  { ts: "2025-08-11 23:28:04", level: "INFO",  building: "HQ Tower",    message: "Scheduled export job queued for Audit Log (Apr 2025)." },
+  { ts: "2025-08-11 23:15:55", level: "WARN",  building: "EMEA Office",  message: "Energy threshold exceeded in Zone Server Room (94% capacity)." },
+  { ts: "2025-08-11 23:09:41", level: "INFO",  building: "HQ Tower",    message: "Two-factor authentication enabled for user alex@acme.com." },
+  { ts: "2025-08-11 22:58:37", level: "ERROR", building: "West Campus",  message: "Export job EXP-7721 failed: upstream log service timeout after 30s." },
+  { ts: "2025-08-11 22:47:19", level: "INFO",  building: "HQ Tower",    message: "Zone South Wing brightness updated to 75% via API." },
+  { ts: "2025-08-11 22:38:06", level: "INFO",  building: "EMEA Office",  message: "Webhook delivery succeeded: Intercom ticket CONV-2294 synced." },
+  { ts: "2025-08-11 22:22:50", level: "WARN",  building: "HQ Tower",    message: "OAuth token expiry in 48 h for Intercom integration." },
+];
+
+const SEED_JOBS: ExportJob[] = [
+  {
+    id: "exp-001",
+    scope: "All buildings",
+    format: "csv",
+    dateRange: "Apr 1 – Apr 30, 2025",
+    status: "completed",
+    progress: 100,
+    createdAt: "Apr 30, 2025 06:00",
+    completedAt: "Apr 30, 2025 06:02",
+    fileSize: "1.4 MB",
+  },
+  {
+    id: "exp-002",
+    scope: "HQ Tower",
+    format: "json",
+    dateRange: "May 1 – May 31, 2025",
+    status: "failed",
+    progress: 34,
+    createdAt: "Jun 1, 2025 07:10",
+    errorMsg: "Upstream log service timeout after 30 s. Partial data — 34% retrieved.",
+  },
+];
+
+function LogsPanel() {
+  const [jobs, setJobs] = useState<ExportJob[]>(SEED_JOBS);
+  const [format, setFormat] = useState<"csv" | "json">("csv");
+  const [scope, setScope] = useState("All buildings");
+  const [startDate, setStartDate] = useState("2025-06-01");
+  const [endDate, setEndDate] = useState("2025-06-30");
+  const [toast, setToast] = useState<string | null>(null);
+  const [levelFilter, setLevelFilter] = useState<"ALL" | "INFO" | "WARN" | "ERROR">("ALL");
+  const timerRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({});
+
+  useEffect(() => () => { Object.values(timerRefs.current).forEach(clearInterval); }, []);
+
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  }
+
+  function startExport() {
+    const id = `exp-${Date.now()}`;
+    const newJob: ExportJob = {
+      id,
+      scope,
+      format,
+      dateRange: `${startDate} – ${endDate}`,
+      status: "queued",
+      progress: 0,
+      createdAt: new Date().toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }),
+    };
+    setJobs(prev => [newJob, ...prev]);
+    showToast(`Export job queued for ${scope} (${format.toUpperCase()})`);
+
+    setTimeout(() => {
+      setJobs(prev => prev.map(j => j.id === id ? { ...j, status: "processing" } : j));
+      let pct = 0;
+      const tick = setInterval(() => {
+        pct += Math.floor(8 + Math.random() * 14);
+        if (pct >= 100) {
+          clearInterval(tick);
+          delete timerRefs.current[id];
+          setJobs(prev => prev.map(j =>
+            j.id === id ? { ...j, status: "completed", progress: 100,
+              completedAt: new Date().toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }),
+              fileSize: `${(Math.random() * 2 + 0.3).toFixed(1)} MB` } : j
+          ));
+          showToast("Export complete — ready to download");
+        } else {
+          setJobs(prev => prev.map(j => j.id === id ? { ...j, progress: pct } : j));
+        }
+      }, 600);
+      timerRefs.current[id] = tick;
+    }, 1200);
+  }
+
+  function retryJob(job: ExportJob) {
+    const newId = `exp-${Date.now()}`;
+    const retried: ExportJob = { ...job, id: newId, status: "queued", progress: 0,
+      errorMsg: undefined, completedAt: undefined,
+      createdAt: new Date().toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }) };
+    setJobs(prev => [retried, ...prev.filter(j => j.id !== job.id)]);
+    showToast(`Retrying export for ${job.scope}…`);
+
+    setTimeout(() => {
+      setJobs(prev => prev.map(j => j.id === newId ? { ...j, status: "processing" } : j));
+      let pct = 0;
+      const tick = setInterval(() => {
+        pct += Math.floor(8 + Math.random() * 14);
+        if (pct >= 100) {
+          clearInterval(tick);
+          delete timerRefs.current[newId];
+          setJobs(prev => prev.map(j =>
+            j.id === newId ? { ...j, status: "completed", progress: 100,
+              completedAt: new Date().toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }),
+              fileSize: `${(Math.random() * 2 + 0.3).toFixed(1)} MB` } : j
+          ));
+          showToast("Retry succeeded — export ready to download");
+        } else {
+          setJobs(prev => prev.map(j => j.id === newId ? { ...j, progress: pct } : j));
+        }
+      }, 600);
+      timerRefs.current[newId] = tick;
+    }, 1200);
+  }
+
+  function downloadJob(job: ExportJob) {
+    showToast(`Downloading ${job.id}.${job.format} (${job.fileSize})…`);
+  }
+
+  const filteredLogs = levelFilter === "ALL" ? MOCK_LOG_ENTRIES : MOCK_LOG_ENTRIES.filter(l => l.level === levelFilter);
+
+  const levelColor: Record<string, string> = {
+    INFO:  "text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-500/15",
+    WARN:  "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/15",
+    ERROR: "text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/15",
+  };
+
+  function StatusPill({ job }: { job: ExportJob }) {
+    if (job.status === "queued")     return <span className="flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"><Clock size={10} />Queued</span>;
+    if (job.status === "processing") return <span className="flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400"><Loader2 size={10} className="animate-spin" />Processing</span>;
+    if (job.status === "completed")  return <span className="flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-50 dark:bg-green-500/15 text-green-600 dark:text-green-400"><PackageCheck size={10} />Completed</span>;
+    return <span className="flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-50 dark:bg-red-500/15 text-red-600 dark:text-red-400"><Ban size={10} />Failed</span>;
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white">System Logs</h2>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Real-time log stream · ACME-scale async export pipeline</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {(["ALL", "INFO", "WARN", "ERROR"] as const).map(l => (
+            <button key={l} onClick={() => setLevelFilter(l)}
+              className={cn("text-[11px] font-semibold px-2.5 py-1 rounded-full transition-colors",
+                levelFilter === l ? "bg-amber-500 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+              )}>
+              {l}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto max-h-64 overflow-y-auto">
+          <table className="w-full text-xs min-w-[560px]">
+            <thead className="sticky top-0 bg-white dark:bg-slate-900 z-10">
+              <tr className="border-b border-slate-100 dark:border-slate-800">
+                <th className="text-left font-semibold text-slate-400 dark:text-slate-500 px-4 py-2.5 w-40">Timestamp</th>
+                <th className="text-left font-semibold text-slate-400 dark:text-slate-500 px-3 py-2.5 w-20">Level</th>
+                <th className="text-left font-semibold text-slate-400 dark:text-slate-500 px-3 py-2.5 w-32 hidden sm:table-cell">Building</th>
+                <th className="text-left font-semibold text-slate-400 dark:text-slate-500 px-3 py-2.5">Message</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredLogs.map((entry, i) => (
+                <tr key={i} className="border-b border-slate-50 dark:border-slate-800/80 last:border-0 hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors">
+                  <td className="px-4 py-2 font-mono text-slate-400 dark:text-slate-500 whitespace-nowrap">{entry.ts}</td>
+                  <td className="px-3 py-2">
+                    <span className={cn("px-1.5 py-0.5 rounded font-semibold text-[10px]", levelColor[entry.level])}>{entry.level}</span>
+                  </td>
+                  <td className="px-3 py-2 text-slate-500 dark:text-slate-400 hidden sm:table-cell whitespace-nowrap">{entry.building}</td>
+                  <td className="px-3 py-2 text-slate-700 dark:text-slate-300">{entry.message}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 shadow-sm p-5">
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+          <Download size={15} className="text-amber-500" /> Export Logs
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Scope</label>
+            <select value={scope} onChange={e => setScope(e.target.value)}
+              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400">
+              <option>All buildings</option>
+              <option>HQ Tower</option>
+              <option>West Campus</option>
+              <option>EMEA Office</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">From</label>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400" />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">To</label>
+            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
+              className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400" />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Format</label>
+            <div className="flex gap-2">
+              {(["csv", "json"] as const).map(f => (
+                <button key={f} onClick={() => setFormat(f)}
+                  className={cn("flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold border transition-colors",
+                    format === f ? "bg-amber-500 text-white border-amber-500"
+                      : "bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-amber-400"
+                  )}>
+                  {f === "csv" ? <FileText size={12} /> : <FileJson size={12} />}
+                  {f.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <button onClick={startExport}
+          className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-white text-sm font-semibold rounded-xl transition-colors shadow hover:shadow-amber-400/30">
+          <Download size={15} /> Start export
+        </button>
+        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2.5">
+          Large exports run as background jobs and will not time out. You&apos;ll see live progress below.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 dark:border-slate-800">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+            <ChevronLast size={15} className="text-slate-400" /> Export Jobs
+          </h3>
+          <span className="text-[11px] text-slate-400">{jobs.length} job{jobs.length !== 1 ? "s" : ""}</span>
+        </div>
+        {jobs.length === 0 ? (
+          <div className="px-5 py-10 text-center text-sm text-slate-400">No export jobs yet.</div>
+        ) : (
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            {jobs.map(job => (
+              <div key={job.id} className="px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{job.scope}</span>
+                    <span className="text-[11px] text-slate-400 font-mono">{job.dateRange}</span>
+                    <span className={cn("flex items-center gap-1 text-[11px] font-semibold px-1.5 py-0.5 rounded",
+                      job.format === "csv" ? "bg-violet-50 dark:bg-violet-500/10 text-violet-600 dark:text-violet-400"
+                        : "bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                    )}>
+                      {job.format === "csv" ? <FileText size={9} /> : <FileJson size={9} />}
+                      {job.format.toUpperCase()}
+                    </span>
+                    <StatusPill job={job} />
+                  </div>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                    Job {job.id} · Started {job.createdAt}
+                    {job.completedAt && ` · Completed ${job.completedAt}`}
+                    {job.fileSize && ` · ${job.fileSize}`}
+                  </p>
+                  {job.status === "failed" && job.errorMsg && (
+                    <div className="mt-1.5 flex items-start gap-1.5 text-[11px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 rounded-lg px-2.5 py-1.5">
+                      <AlertCircle size={11} className="shrink-0 mt-0.5" />{job.errorMsg}
+                    </div>
+                  )}
+                  {(job.status === "processing" || job.status === "queued") && (
+                    <div className="mt-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] text-slate-400">{job.status === "queued" ? "Waiting in queue…" : `Retrieving chunks — ${job.progress}%`}</span>
+                        <span className="text-[10px] font-mono text-slate-400">{job.progress}%</span>
+                      </div>
+                      <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all duration-500"
+                          style={{ width: `${job.progress}%`, backgroundColor: job.status === "queued" ? "#94a3b8" : "#f59e0b" }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {job.status === "completed" && (
+                    <button onClick={() => downloadJob(job)}
+                      className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-green-50 dark:bg-green-500/15 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-500/25 transition-colors">
+                      <Download size={12} /> Download
+                    </button>
+                  )}
+                  {job.status === "failed" && (
+                    <button onClick={() => retryJob(job)}
+                      className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-500/25 transition-colors">
+                      <RotateCcw size={12} /> Retry
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-slate-900 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-xl">
+          <CheckCircle2 size={15} className="text-green-400 shrink-0" />{toast}
+          <button onClick={() => setToast(null)} className="ml-2 text-slate-400 hover:text-white"><X size={13} /></button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 const DEFAULT_BRANDING: BrandingConfig = {
@@ -1140,6 +1475,7 @@ export default function DashboardPage() {
     { id: "alerts",       label: "Alerts",       icon: <Bell size={17} />, badge: alertList.filter(a => a.severity !== "info").length },
     { id: "schedules",    label: "Schedules",    icon: <Calendar size={17} /> },
     { id: "reports",      label: "Reports",      icon: <BarChart3 size={17} /> },
+    { id: "logs",         label: "Logs",         icon: <ScrollText size={17} /> },
     { id: "integrations", label: "Integrations", icon: <Plug size={17} /> },
     { id: "settings",     label: "Settings",     icon: <Settings size={17} /> },
   ];
@@ -1635,6 +1971,9 @@ export default function DashboardPage() {
 
           {/* ── INTEGRATIONS ── */}
           {tab === "integrations" && <IntegrationsPanel />}
+
+          {/* ── LOGS ── */}
+          {tab === "logs" && <LogsPanel />}
 
           {/* ── SETTINGS ── */}
           {tab === "settings" && <SettingsPanel branding={branding} onBrandingChange={setBranding} />}
