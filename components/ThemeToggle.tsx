@@ -28,6 +28,10 @@ export default function ThemeToggle() {
   useEffect(() => {
     const saved = (localStorage.getItem("lumiglow-theme") as Theme | null) ?? "system";
     setTheme(saved);
+    // Re-apply theme on mount so navigating between pages (e.g. home → dashboard)
+    // doesn't lose dark mode on Android — the anti-FOUC inline script only runs
+    // on the initial HTML load, not on client-side navigations.
+    applyTheme(saved);
 
     // Keep system mode in sync when OS preference changes
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -36,8 +40,17 @@ export default function ThemeToggle() {
         applyTheme("system");
       }
     };
-    mq.addEventListener("change", onSystem);
-    return () => mq.removeEventListener("change", onSystem);
+    // Support both the modern addEventListener API and the legacy addListener
+    // used by older Android Chrome (pre-v79) to avoid silent dark-mode breakage.
+    if (mq.addEventListener) {
+      mq.addEventListener("change", onSystem);
+      return () => mq.removeEventListener("change", onSystem);
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (mq as any).addListener(onSystem);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return () => (mq as any).removeListener(onSystem);
+    }
   }, []);
 
   useEffect(() => {
