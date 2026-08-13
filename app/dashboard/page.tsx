@@ -9,7 +9,8 @@ import {
   TrendingDown, Activity, Users, ShieldCheck, Search,
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
   Palette, Upload, Eye, Plug, RefreshCw, ArrowLeftRight,
-  Database, Globe, Link2, AlertCircle, Clock,
+  Database, Globe, Link2, AlertCircle, Clock, ClipboardCheck,
+  Circle, CheckCircle, XCircle, RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -24,7 +25,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings" | "integrations";
+type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings" | "integrations" | "qa";
 
 interface BrandingConfig {
   companyName: string;
@@ -1067,6 +1068,300 @@ function IntegrationsPanel() {
   );
 }
 
+// ─── Dark Mode QA Checklist ───────────────────────────────────────────────────
+
+type CheckStatus = "pending" | "pass" | "fail";
+
+interface QAItem {
+  id: string;
+  area: string;
+  check: string;
+  status: CheckStatus;
+  notes: string;
+}
+
+const INITIAL_QA_ITEMS: QAItem[] = [
+  { id: "q01", area: "Sidebar", check: "Background uses dark surface color (slate-900)", status: "pending", notes: "" },
+  { id: "q02", area: "Sidebar", check: "Nav items show correct hover state in dark mode", status: "pending", notes: "" },
+  { id: "q03", area: "Sidebar", check: "Active nav item accent color is legible on dark background", status: "pending", notes: "" },
+  { id: "q04", area: "Sidebar", check: "Logo / initials badge renders correctly in dark mode", status: "pending", notes: "" },
+  { id: "q05", area: "Sidebar", check: "User footer border and avatar are visible in dark mode", status: "pending", notes: "" },
+  { id: "q06", area: "Top Bar", check: "Header background is dark (slate-900), not white", status: "pending", notes: "" },
+  { id: "q07", area: "Top Bar", check: "Search bar uses dark input style", status: "pending", notes: "" },
+  { id: "q08", area: "Top Bar", check: "Theme toggle dropdown has correct dark background", status: "pending", notes: "" },
+  { id: "q09", area: "Top Bar", check: "Notification bell icon and badge are visible", status: "pending", notes: "" },
+  { id: "q10", area: "KPI Cards", check: "Card backgrounds switch to dark surface (slate-900)", status: "pending", notes: "" },
+  { id: "q11", area: "KPI Cards", check: "Icon accent chip adapts to dark opacity variant", status: "pending", notes: "" },
+  { id: "q12", area: "KPI Cards", check: "Primary value text is white/light in dark mode", status: "pending", notes: "" },
+  { id: "q13", area: "KPI Cards", check: "Sub-label text is muted but legible (slate-400/500)", status: "pending", notes: "" },
+  { id: "q14", area: "Energy Chart", check: "Chart container background is dark", status: "pending", notes: "" },
+  { id: "q15", area: "Energy Chart", check: "SVG grid lines use low-opacity light color", status: "pending", notes: "" },
+  { id: "q16", area: "Energy Chart", check: "Axis labels are readable against dark background", status: "pending", notes: "" },
+  { id: "q17", area: "Energy Chart", check: "Hover tooltip uses dark background (not white)", status: "pending", notes: "" },
+  { id: "q18", area: "Alerts", check: "Critical alert row uses dark-variant red background", status: "pending", notes: "" },
+  { id: "q19", area: "Alerts", check: "Warning alert row uses dark-variant amber background", status: "pending", notes: "" },
+  { id: "q20", area: "Alerts", check: "Info alert row uses dark-variant sky background", status: "pending", notes: "" },
+  { id: "q21", area: "Alerts", check: "Badge text colors remain accessible in dark mode", status: "pending", notes: "" },
+  { id: "q22", area: "Zone Controls", check: "Active zone row uses amber dark variant", status: "pending", notes: "" },
+  { id: "q23", area: "Zone Controls", check: "Inactive zone row uses slate dark variant", status: "pending", notes: "" },
+  { id: "q24", area: "Zone Controls", check: "Range slider is visible against dark background", status: "pending", notes: "" },
+  { id: "q25", area: "Zone Controls", check: "Toggle icons change color correctly when active/inactive in dark mode", status: "pending", notes: "" },
+  { id: "q26", area: "Forms & Inputs", check: "Text inputs use dark bg (slate-800) with light text", status: "pending", notes: "" },
+  { id: "q27", area: "Forms & Inputs", check: "Select dropdowns use dark bg and border", status: "pending", notes: "" },
+  { id: "q28", area: "Forms & Inputs", check: "Input focus ring is visible in dark mode", status: "pending", notes: "" },
+  { id: "q29", area: "Forms & Inputs", check: "Labels above inputs are legible (slate-400)", status: "pending", notes: "" },
+  { id: "q30", area: "Integrations", check: "Tab switcher pill background is correct dark shade", status: "pending", notes: "" },
+  { id: "q31", area: "Integrations", check: "'Connected' and 'Not connected' badges render in dark mode", status: "pending", notes: "" },
+  { id: "q32", area: "Integrations", check: "Field mapping table rows alternate correctly in dark", status: "pending", notes: "" },
+  { id: "q33", area: "Integrations", check: "Activity log rows use dark-variant background", status: "pending", notes: "" },
+  { id: "q34", area: "Settings", check: "All settings card backgrounds are dark", status: "pending", notes: "" },
+  { id: "q35", area: "Settings", check: "Toggle rows show correct border color in dark mode", status: "pending", notes: "" },
+  { id: "q36", area: "Settings", check: "Branding preview sidebar renders in dark context", status: "pending", notes: "" },
+  { id: "q37", area: "Toasts & Overlays", check: "Toast notification uses correct dark background", status: "pending", notes: "" },
+  { id: "q38", area: "Toasts & Overlays", check: "Mobile sidebar overlay (dark scrim) is sufficient", status: "pending", notes: "" },
+  { id: "q39", area: "Global", check: "Page background switches to slate-950 in dark mode", status: "pending", notes: "" },
+  { id: "q40", area: "Global", check: "Scrollbars (where visible) are not stark white", status: "pending", notes: "" },
+];
+
+const QA_AREAS = [...new Set(INITIAL_QA_ITEMS.map(i => i.area))];
+
+function DarkModeQAPanel() {
+  const [items, setItems] = useState<QAItem[]>(INITIAL_QA_ITEMS);
+  const [filterArea, setFilterArea] = useState<string>("All");
+  const [filterStatus, setFilterStatus] = useState<CheckStatus | "all">("all");
+  const [editingNote, setEditingNote] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [resetConfirm, setResetConfirm] = useState(false);
+
+  function setStatus(id: string, status: CheckStatus) {
+    setItems(prev => prev.map(i => i.id === id ? { ...i, status } : i));
+  }
+
+  function saveNote(id: string) {
+    setItems(prev => prev.map(i => i.id === id ? { ...i, notes: noteDraft } : i));
+    setEditingNote(null);
+    setNoteDraft("");
+  }
+
+  function resetAll() {
+    setItems(INITIAL_QA_ITEMS);
+    setResetConfirm(false);
+  }
+
+  const displayed = items
+    .filter(i => filterArea === "All" || i.area === filterArea)
+    .filter(i => filterStatus === "all" || i.status === filterStatus);
+
+  const passCount = items.filter(i => i.status === "pass").length;
+  const failCount = items.filter(i => i.status === "fail").length;
+  const pendingCount = items.filter(i => i.status === "pending").length;
+  const total = items.length;
+  const progress = Math.round((passCount / total) * 100);
+
+  const areaGroups = QA_AREAS
+    .filter(a => filterArea === "All" || a === filterArea)
+    .map(area => ({
+      area,
+      items: displayed.filter(i => i.area === area),
+    }))
+    .filter(g => g.items.length > 0);
+
+  return (
+    <div className="max-w-3xl space-y-5">
+      {/* Header card */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <ClipboardCheck size={17} className="text-amber-500" />
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Dark Mode QA Checklist</h2>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-500/20 text-sky-600 dark:text-sky-400">
+                Synced from Asana
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Verify dark mode appearance across all dashboard components. Switch to dark mode using the theme toggle in the header, then work through these checks.
+            </p>
+          </div>
+          <button
+            onClick={() => setResetConfirm(true)}
+            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-medium transition-colors shrink-0"
+          >
+            <RotateCcw size={12} /> Reset all
+          </button>
+        </div>
+
+        {/* Progress bar */}
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">{progress}% complete</span>
+            <div className="flex items-center gap-3 text-[11px]">
+              <span className="flex items-center gap-1 text-green-600 dark:text-green-400 font-semibold"><CheckCircle size={11} /> {passCount} pass</span>
+              <span className="flex items-center gap-1 text-red-500 dark:text-red-400 font-semibold"><XCircle size={11} /> {failCount} fail</span>
+              <span className="flex items-center gap-1 text-slate-400 font-semibold"><Circle size={11} /> {pendingCount} pending</span>
+            </div>
+          </div>
+          <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{
+                width: `${progress}%`,
+                background: progress === 100 ? "#22c55e" : failCount > 0 ? "#f59e0b" : "#10b981",
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/60 flex-wrap">
+          {["All", ...QA_AREAS].map(a => (
+            <button
+              key={a}
+              onClick={() => setFilterArea(a)}
+              className={cn(
+                "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all",
+                filterArea === a
+                  ? "bg-white dark:bg-slate-900 shadow text-slate-900 dark:text-white"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+              )}
+            >
+              {a}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/60 ml-auto">
+          {(["all", "pending", "pass", "fail"] as const).map(s => (
+            <button
+              key={s}
+              onClick={() => setFilterStatus(s)}
+              className={cn(
+                "px-3 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all",
+                filterStatus === s
+                  ? "bg-white dark:bg-slate-900 shadow text-slate-900 dark:text-white"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+              )}
+            >
+              {s === "all" ? "All" : s}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Checklist groups */}
+      {areaGroups.length === 0 && (
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-10 text-center shadow-sm">
+          <p className="text-sm text-slate-400">No items match the current filter.</p>
+        </div>
+      )}
+
+      {areaGroups.map(({ area, items: groupItems }) => (
+        <div key={area} className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{area}</span>
+            <span className="ml-auto text-[11px] text-slate-400">
+              {groupItems.filter(i => i.status === "pass").length}/{groupItems.length} passed
+            </span>
+          </div>
+          <div className="divide-y divide-slate-50 dark:divide-slate-800/60">
+            {groupItems.map(item => (
+              <div key={item.id} className="px-5 py-3.5">
+                <div className="flex items-start gap-3">
+                  {/* Status buttons */}
+                  <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                    <button
+                      onClick={() => setStatus(item.id, item.status === "pass" ? "pending" : "pass")}
+                      aria-label="Mark pass"
+                      className={cn(
+                        "w-6 h-6 rounded-full flex items-center justify-center transition-all border",
+                        item.status === "pass"
+                          ? "bg-green-500 border-green-500 text-white"
+                          : "border-slate-200 dark:border-slate-700 text-slate-300 dark:text-slate-600 hover:border-green-400 hover:text-green-500"
+                      )}
+                    >
+                      <CheckCircle2 size={13} />
+                    </button>
+                    <button
+                      onClick={() => setStatus(item.id, item.status === "fail" ? "pending" : "fail")}
+                      aria-label="Mark fail"
+                      className={cn(
+                        "w-6 h-6 rounded-full flex items-center justify-center transition-all border",
+                        item.status === "fail"
+                          ? "bg-red-500 border-red-500 text-white"
+                          : "border-slate-200 dark:border-slate-700 text-slate-300 dark:text-slate-600 hover:border-red-400 hover:text-red-500"
+                      )}
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+
+                  {/* Check text */}
+                  <div className="flex-1 min-w-0">
+                    <p className={cn(
+                      "text-xs font-medium",
+                      item.status === "pass" ? "text-slate-400 dark:text-slate-500 line-through" :
+                      item.status === "fail" ? "text-red-600 dark:text-red-400" :
+                      "text-slate-700 dark:text-slate-300"
+                    )}>
+                      {item.check}
+                    </p>
+                    {editingNote === item.id ? (
+                      <div className="mt-2 flex gap-2">
+                        <input
+                          autoFocus
+                          value={noteDraft}
+                          onChange={e => setNoteDraft(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") saveNote(item.id); if (e.key === "Escape") setEditingNote(null); }}
+                          placeholder="Add a note…"
+                          className="flex-1 px-2 py-1 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                        />
+                        <button onClick={() => saveNote(item.id)} className="text-xs font-semibold text-amber-500 hover:text-amber-400">Save</button>
+                        <button onClick={() => setEditingNote(null)} className="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => { setEditingNote(item.id); setNoteDraft(item.notes); }}
+                        className="mt-1 text-[11px] text-slate-400 hover:text-amber-500 transition-colors font-medium"
+                      >
+                        {item.notes ? `📝 ${item.notes}` : "+ Add note"}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Status pill */}
+                  <span className={cn(
+                    "shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full mt-0.5",
+                    item.status === "pass" ? "bg-green-50 dark:bg-green-500/15 text-green-600 dark:text-green-400" :
+                    item.status === "fail" ? "bg-red-50 dark:bg-red-500/15 text-red-600 dark:text-red-400" :
+                    "bg-slate-100 dark:bg-slate-800 text-slate-400"
+                  )}>
+                    {item.status}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {/* Reset confirm modal */}
+      {resetConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 shadow-2xl w-80">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-2">Reset checklist?</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">This will clear all statuses and notes. This action cannot be undone.</p>
+            <div className="flex gap-3">
+              <button onClick={resetAll} className="flex-1 py-2 text-sm font-semibold rounded-xl bg-red-500 hover:bg-red-400 text-white transition-colors">Reset</button>
+              <button onClick={() => setResetConfirm(false)} className="flex-1 py-2 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 const DEFAULT_BRANDING: BrandingConfig = {
@@ -1142,6 +1437,7 @@ export default function DashboardPage() {
     { id: "reports",      label: "Reports",      icon: <BarChart3 size={17} /> },
     { id: "integrations", label: "Integrations", icon: <Plug size={17} /> },
     { id: "settings",     label: "Settings",     icon: <Settings size={17} /> },
+    { id: "qa",           label: "Dark Mode QA", icon: <ClipboardCheck size={17} /> },
   ];
 
   const filteredZones = buildings
@@ -1638,6 +1934,9 @@ export default function DashboardPage() {
 
           {/* ── SETTINGS ── */}
           {tab === "settings" && <SettingsPanel branding={branding} onBrandingChange={setBranding} />}
+
+          {/* ── DARK MODE QA ── */}
+          {tab === "qa" && <DarkModeQAPanel />}
 
         </main>
       </div>
