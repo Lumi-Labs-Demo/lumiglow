@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
 import {
   Zap, LayoutDashboard, Building2, Bell, Calendar,
@@ -10,6 +10,7 @@ import {
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
   Palette, Upload, Eye, Plug, RefreshCw, ArrowLeftRight,
   Database, Globe, Link2, AlertCircle, Clock,
+  LayoutGrid, Plus, GripVertical, EyeOff, ArrowUp, ArrowDown, Pencil,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -24,7 +25,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings" | "integrations";
+type Tab = "home" | "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings" | "integrations";
 
 interface BrandingConfig {
   companyName: string;
@@ -1067,6 +1068,426 @@ function IntegrationsPanel() {
   );
 }
 
+// ─── Personalized Dashboard ───────────────────────────────────────────────────
+
+type WidgetId =
+  | "kpi_buildings"
+  | "kpi_zones"
+  | "kpi_power"
+  | "kpi_savings"
+  | "chart_energy"
+  | "panel_alerts"
+  | "panel_buildings"
+  | "panel_schedules";
+
+interface WidgetMeta {
+  id: WidgetId;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+}
+
+const WIDGET_CATALOG: WidgetMeta[] = [
+  { id: "kpi_buildings",   label: "Buildings Online",  description: "Number of buildings currently online",      icon: <Building2 size={14} />   },
+  { id: "kpi_zones",       label: "Zones Active",      description: "Active zones vs total across all buildings", icon: <Zap size={14} />         },
+  { id: "kpi_power",       label: "Live Power Draw",   description: "Current live power consumption in kW",      icon: <Activity size={14} />    },
+  { id: "kpi_savings",     label: "Energy Savings",    description: "Percentage savings vs last-year baseline",   icon: <TrendingDown size={14} /> },
+  { id: "chart_energy",    label: "Energy Chart",      description: "Hourly energy usage chart vs baseline",      icon: <BarChart3 size={14} />   },
+  { id: "panel_alerts",    label: "Recent Alerts",     description: "Latest critical and warning alerts",         icon: <Bell size={14} />        },
+  { id: "panel_buildings", label: "Buildings Summary", description: "Per-building zone and power summary",        icon: <Building2 size={14} />   },
+  { id: "panel_schedules", label: "Schedules",         description: "Active lighting schedules overview",         icon: <Calendar size={14} />    },
+];
+
+const DEFAULT_WIDGETS: WidgetId[] = [
+  "kpi_buildings", "kpi_zones", "kpi_power", "kpi_savings",
+  "chart_energy", "panel_alerts",
+];
+
+const WIDGET_CAP = 8;
+const LS_KEY = "lumiglow_personal_dashboard_v1";
+
+interface DashboardConfig {
+  widgets: WidgetId[];
+}
+
+function loadDashboardConfig(): DashboardConfig {
+  if (typeof window === "undefined") return { widgets: DEFAULT_WIDGETS };
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) return JSON.parse(raw) as DashboardConfig;
+  } catch {}
+  return { widgets: DEFAULT_WIDGETS };
+}
+
+function saveDashboardConfig(cfg: DashboardConfig) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(cfg)); } catch {}
+}
+
+function PersonalDashboard({
+  buildings, alertList, onGoToAlerts, onGoToBuildings, accentColor,
+}: {
+  buildings: Building[];
+  alertList: Alert[];
+  onGoToAlerts: () => void;
+  onGoToBuildings: () => void;
+  accentColor: string;
+}) {
+  const [config, setConfig] = useState<DashboardConfig>({ widgets: DEFAULT_WIDGETS });
+  const [loaded, setLoaded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [showCatalog, setShowCatalog] = useState(false);
+  const [savedToast, setSavedToast] = useState(false);
+
+  useEffect(() => {
+    setConfig(loadDashboardConfig());
+    setLoaded(true);
+  }, []);
+
+  const widgets = config.widgets;
+
+  function updateWidgets(next: WidgetId[]) {
+    const newCfg = { widgets: next };
+    setConfig(newCfg);
+    saveDashboardConfig(newCfg);
+  }
+
+  function moveUp(idx: number) {
+    if (idx === 0) return;
+    const next = [...widgets];
+    [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+    updateWidgets(next);
+  }
+
+  function moveDown(idx: number) {
+    if (idx === widgets.length - 1) return;
+    const next = [...widgets];
+    [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+    updateWidgets(next);
+  }
+
+  function removeWidget(id: WidgetId) {
+    updateWidgets(widgets.filter(w => w !== id));
+  }
+
+  function addWidget(id: WidgetId) {
+    if (widgets.length >= WIDGET_CAP) return;
+    if (widgets.includes(id)) return;
+    updateWidgets([...widgets, id]);
+  }
+
+  function saveAndClose() {
+    setEditing(false);
+    setShowCatalog(false);
+    setSavedToast(true);
+    setTimeout(() => setSavedToast(false), 2200);
+  }
+
+  const watts = buildings.flatMap(b => b.floors).flatMap(f => f.zones).reduce((s, z) => s + z.powerWatts, 0);
+  const totalZoneCount = buildings.flatMap(b => b.floors).flatMap(f => f.zones).length;
+  const zonesOnCount = buildings.flatMap(b => b.floors).flatMap(f => f.zones).filter(z => z.isOn).length;
+
+  const availableToAdd = WIDGET_CATALOG.filter(w => !widgets.includes(w.id));
+
+  if (!loaded) return null;
+
+  // Empty state
+  if (widgets.length === 0 && !editing) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <div
+          className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4 text-white text-2xl"
+          style={{ background: `linear-gradient(135deg, ${accentColor}cc, ${accentColor})` }}
+        >
+          <LayoutGrid size={28} />
+        </div>
+        <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Your dashboard is empty</h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 max-w-sm">
+          Add widgets to personalize your home surface. You can show KPIs, charts, alerts, and more — all tailored to your workflow.
+        </p>
+        <button
+          onClick={() => { setEditing(true); setShowCatalog(true); }}
+          className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white rounded-xl shadow transition-all hover:opacity-90"
+          style={{ backgroundColor: accentColor }}
+        >
+          <Plus size={15} /> Add widgets
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div>
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white">My Dashboard</h2>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+            {widgets.length}/{WIDGET_CAP} widgets · personalized to you
+          </p>
+        </div>
+        <div className="flex-1" />
+        {/* Edit controls — desktop only */}
+        <div className="hidden sm:flex items-center gap-2">
+          {editing ? (
+            <>
+              {widgets.length < WIDGET_CAP && (
+                <button
+                  onClick={() => setShowCatalog(v => !v)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <Plus size={13} /> Add widget
+                </button>
+              )}
+              <button
+                onClick={saveAndClose}
+                className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-lg text-white shadow transition-all hover:opacity-90"
+                style={{ backgroundColor: accentColor }}
+              >
+                <CheckCircle2 size={13} /> Done
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setEditing(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            >
+              <Pencil size={12} /> Edit dashboard
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Widget catalog drawer */}
+      {editing && showCatalog && (
+        <div className="hidden sm:block rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Widget catalog</p>
+            <p className="text-[11px] text-slate-400">{widgets.length}/{WIDGET_CAP} slots used</p>
+          </div>
+          {availableToAdd.length === 0 ? (
+            <p className="text-xs text-slate-400 text-center py-2">All available widgets are on your dashboard.</p>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {availableToAdd.map(w => (
+                <button
+                  key={w.id}
+                  onClick={() => addWidget(w.id)}
+                  disabled={widgets.length >= WIDGET_CAP}
+                  className={cn(
+                    "flex items-center gap-2 p-3 rounded-xl border text-left transition-all",
+                    widgets.length >= WIDGET_CAP
+                      ? "opacity-40 cursor-not-allowed border-slate-200 dark:border-slate-700"
+                      : "border-slate-200 dark:border-slate-700 hover:border-amber-400 hover:bg-white dark:hover:bg-slate-800 cursor-pointer"
+                  )}
+                >
+                  <span className="shrink-0 text-amber-500">{w.icon}</span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{w.label}</p>
+                    <p className="text-[10px] text-slate-400 truncate">{w.description}</p>
+                  </div>
+                  <Plus size={12} className="shrink-0 text-amber-500 ml-auto" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Widget list */}
+      <div className="space-y-4">
+        {widgets.map((wid, idx) => {
+          const meta = WIDGET_CATALOG.find(w => w.id === wid)!;
+          return (
+            <div key={wid}>
+              {editing && (
+                <div className="hidden sm:flex items-center gap-1 mb-1.5 px-1">
+                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                    <GripVertical size={11} /> {meta.label}
+                  </span>
+                  <div className="flex items-center gap-1 ml-auto">
+                    <button
+                      onClick={() => moveUp(idx)}
+                      disabled={idx === 0}
+                      aria-label={`Move ${meta.label} up`}
+                      className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-25 transition-colors"
+                    >
+                      <ArrowUp size={13} />
+                    </button>
+                    <button
+                      onClick={() => moveDown(idx)}
+                      disabled={idx === widgets.length - 1}
+                      aria-label={`Move ${meta.label} down`}
+                      className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-25 transition-colors"
+                    >
+                      <ArrowDown size={13} />
+                    </button>
+                    <button
+                      onClick={() => removeWidget(wid)}
+                      aria-label={`Remove ${meta.label}`}
+                      className="p-1 rounded text-slate-400 hover:text-red-500 transition-colors"
+                    >
+                      <EyeOff size={13} />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <WidgetRenderer
+                id={wid}
+                buildings={buildings}
+                alertList={alertList}
+                watts={watts}
+                totalZoneCount={totalZoneCount}
+                zonesOnCount={zonesOnCount}
+                onGoToAlerts={onGoToAlerts}
+                onGoToBuildings={onGoToBuildings}
+              />
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Mobile read-only notice */}
+      <div className="sm:hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 px-4 py-3 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+        <Eye size={13} className="shrink-0" />
+        Dashboard editing is available on desktop. You&apos;re viewing a read-only layout.
+      </div>
+
+      {savedToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-slate-900 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-xl">
+          <CheckCircle2 size={15} className="text-green-400 shrink-0" />
+          Dashboard saved!
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Widget Renderer ──────────────────────────────────────────────────────────
+
+function WidgetRenderer({
+  id, buildings, alertList, watts, totalZoneCount, zonesOnCount,
+  onGoToAlerts, onGoToBuildings,
+}: {
+  id: WidgetId;
+  buildings: Building[];
+  alertList: Alert[];
+  watts: number;
+  totalZoneCount: number;
+  zonesOnCount: number;
+  onGoToAlerts: () => void;
+  onGoToBuildings: () => void;
+}) {
+  const kwhEst = ((watts / 1000) * 8).toFixed(1);
+
+  if (id === "kpi_buildings") return (
+    <KpiCard label="Buildings online" value={String(buildings.length)} sub="All systems normal"
+      icon={<Building2 size={18} className="text-sky-600 dark:text-sky-400" />} accent="bg-sky-100 dark:bg-sky-500/20" />
+  );
+
+  if (id === "kpi_zones") return (
+    <KpiCard label="Zones active" value={`${zonesOnCount} / ${totalZoneCount}`} sub="Across all floors"
+      icon={<Zap size={18} className="text-amber-600 dark:text-amber-400" />} accent="bg-amber-100 dark:bg-amber-500/20" />
+  );
+
+  if (id === "kpi_power") return (
+    <KpiCard label="Live power draw" value={`${(watts / 1000).toFixed(1)} kW`} sub={`~${kwhEst} kWh est. today`}
+      icon={<Activity size={18} className="text-violet-600 dark:text-violet-400" />} accent="bg-violet-100 dark:bg-violet-500/20" />
+  );
+
+  if (id === "kpi_savings") return (
+    <KpiCard label="Energy savings" value="31%" sub="vs. last-year baseline"
+      icon={<TrendingDown size={18} className="text-green-600 dark:text-green-400" />} accent="bg-green-100 dark:bg-green-500/20" />
+  );
+
+  if (id === "chart_energy") return (
+    <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white">Energy usage today</h2>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">All buildings · kWh per hour</p>
+        </div>
+        <span className="text-xs font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2.5 py-1 rounded-full">↓ 31% vs baseline</span>
+      </div>
+      <EnergyChart />
+    </div>
+  );
+
+  if (id === "panel_alerts") return (
+    <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-bold text-slate-900 dark:text-white">Recent alerts</h2>
+        <button onClick={onGoToAlerts} className="text-xs text-amber-500 hover:text-amber-400 font-semibold">View all →</button>
+      </div>
+      <div className="space-y-2">
+        {alertList.slice(0, 4).map(a => (
+          <div key={a.id} className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+            <AlertBadge severity={a.severity} />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-slate-700 dark:text-slate-300 font-medium truncate">{a.message}</p>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{a.zone} · {a.ts}</p>
+            </div>
+          </div>
+        ))}
+        {alertList.length === 0 && <p className="text-sm text-slate-400 text-center py-4">All clear 🎉</p>}
+      </div>
+    </div>
+  );
+
+  if (id === "panel_buildings") return (
+    <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-bold text-slate-900 dark:text-white">Buildings</h2>
+        <button onClick={onGoToBuildings} className="text-xs text-amber-500 hover:text-amber-400 font-semibold">Manage →</button>
+      </div>
+      <div className="space-y-2">
+        {buildings.map(b => {
+          const bZones = b.floors.flatMap(f => f.zones);
+          const on = bZones.filter(z => z.isOn).length;
+          const bWatts = bZones.reduce((s, z) => s + z.powerWatts, 0);
+          return (
+            <div key={b.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+              <Building2 size={15} className="text-slate-400 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{b.name}</p>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500">{b.location}</p>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="text-xs font-bold text-slate-800 dark:text-white">{on}/{bZones.length} on</p>
+                <p className="text-[11px] text-slate-400">{(bWatts / 1000).toFixed(1)} kW</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  if (id === "panel_schedules") return (
+    <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
+      <h2 className="text-sm font-bold text-slate-900 dark:text-white mb-3">Schedules</h2>
+      <div className="space-y-2">
+        {[
+          { name: "Business Hours", scope: "All buildings", time: "Mon–Fri  8:00–19:00",  mode: "auto" },
+          { name: "Weekend Dimmed", scope: "HQ Tower",      time: "Sat–Sun  9:00–18:00",  mode: "auto" },
+          { name: "Late Night Min", scope: "EMEA Office",   time: "Daily  22:00–06:00",    mode: "auto" },
+        ].map(s => (
+          <div key={s.name} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+            <Calendar size={13} className="text-amber-500 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{s.name}</p>
+              <p className="text-[11px] text-slate-400">{s.scope} · {s.time}</p>
+            </div>
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-100 text-sky-600 dark:bg-sky-500/20 dark:text-sky-400 shrink-0">{s.mode}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  return null;
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 const DEFAULT_BRANDING: BrandingConfig = {
@@ -1078,7 +1499,7 @@ const DEFAULT_BRANDING: BrandingConfig = {
 };
 
 export default function DashboardPage() {
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useState<Tab>("home");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [buildings, setBuildings] = useState(initialBuildings);
   const [alertList, setAlertList] = useState(initialAlerts);
@@ -1135,13 +1556,14 @@ export default function DashboardPage() {
   const savings = 31;
 
   const navItems: { id: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
-    { id: "overview",     label: "Overview",     icon: <LayoutDashboard size={17} /> },
-    { id: "buildings",    label: "Buildings",    icon: <Building2 size={17} /> },
-    { id: "alerts",       label: "Alerts",       icon: <Bell size={17} />, badge: alertList.filter(a => a.severity !== "info").length },
-    { id: "schedules",    label: "Schedules",    icon: <Calendar size={17} /> },
-    { id: "reports",      label: "Reports",      icon: <BarChart3 size={17} /> },
-    { id: "integrations", label: "Integrations", icon: <Plug size={17} /> },
-    { id: "settings",     label: "Settings",     icon: <Settings size={17} /> },
+    { id: "home",          label: "My Dashboard",  icon: <LayoutGrid size={17} />         },
+    { id: "overview",      label: "Overview",      icon: <LayoutDashboard size={17} />    },
+    { id: "buildings",     label: "Buildings",     icon: <Building2 size={17} />          },
+    { id: "alerts",        label: "Alerts",        icon: <Bell size={17} />, badge: alertList.filter(a => a.severity !== "info").length },
+    { id: "schedules",     label: "Schedules",     icon: <Calendar size={17} />           },
+    { id: "reports",       label: "Reports",       icon: <BarChart3 size={17} />          },
+    { id: "integrations",  label: "Integrations",  icon: <Plug size={17} />               },
+    { id: "settings",      label: "Settings",      icon: <Settings size={17} />           },
   ];
 
   const filteredZones = buildings
@@ -1244,7 +1666,9 @@ export default function DashboardPage() {
           </button>
 
           <div>
-            <h1 className="text-sm font-bold text-slate-900 dark:text-white capitalize">{tab}</h1>
+            <h1 className="text-sm font-bold text-slate-900 dark:text-white capitalize">
+              {tab === "home" ? "My Dashboard" : tab}
+            </h1>
             <p className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:block">
               {branding.tagline}
             </p>
@@ -1280,6 +1704,17 @@ export default function DashboardPage() {
 
         {/* Content */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+
+          {/* ── HOME (PERSONALIZED DASHBOARD) ── */}
+          {tab === "home" && (
+            <PersonalDashboard
+              buildings={buildings}
+              alertList={alertList}
+              onGoToAlerts={() => setTab("alerts")}
+              onGoToBuildings={() => setTab("buildings")}
+              accentColor={branding.accentColor}
+            />
+          )}
 
           {/* ── OVERVIEW ── */}
           {tab === "overview" && (
