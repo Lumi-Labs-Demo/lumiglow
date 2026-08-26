@@ -259,6 +259,40 @@ export const pricingTiers: PricingTier[] = [
   },
 ];
 
+// ─── API Gateway Health ───────────────────────────────────────────────────────
+
+export interface GatewayIncident {
+  id: string;
+  ts: string;
+  endpoint: string;
+  statusCode: number;
+  retries: number;
+  resolved: boolean;
+  resolutionMs: number | null;
+}
+
+export const gatewayIncidents: GatewayIncident[] = [
+  { id: "g1", ts: "Today 11:04", endpoint: "/api/v2/zones/status",    statusCode: 504, retries: 3, resolved: true,  resolutionMs: 1240 },
+  { id: "g2", ts: "Today 10:31", endpoint: "/api/v2/energy/snapshot", statusCode: 504, retries: 2, resolved: true,  resolutionMs: 820  },
+  { id: "g3", ts: "Today 09:58", endpoint: "/api/v2/alerts/poll",     statusCode: 504, retries: 1, resolved: true,  resolutionMs: 410  },
+  { id: "g4", ts: "Yesterday",   endpoint: "/api/v2/zones/status",    statusCode: 504, retries: 3, resolved: true,  resolutionMs: 2100 },
+  { id: "g5", ts: "May 25",      endpoint: "/api/v2/schedules/sync",  statusCode: 504, retries: 5, resolved: false, resolutionMs: null },
+];
+
+export interface GatewayMetric {
+  label: string;
+  value: string;
+  delta: string;
+  improved: boolean;
+}
+
+export const gatewayMetrics: GatewayMetric[] = [
+  { label: "504 rate (24h)",      value: "0.12%",  delta: "↓ 91% vs last week", improved: true  },
+  { label: "Avg retry resolution", value: "824 ms", delta: "↓ 68% vs last week", improved: true  },
+  { label: "Max upstream timeout", value: "3,000 ms", delta: "was 30,000 ms",    improved: true  },
+  { label: "Requests with retries", value: "4 / 3,210", delta: "↓ 97%",          improved: true  },
+];
+
 // ─── FAQ ──────────────────────────────────────────────────────────────────────
 
 export interface FAQItem {
