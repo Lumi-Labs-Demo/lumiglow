@@ -313,45 +313,143 @@ const LOG_ENTRIES: LogEntry[] = [
 ];
 
 type LogFormat = "csv" | "json" | "txt";
+type JobStatus = "queued" | "running" | "completed" | "failed";
+
+interface ExportJob {
+  id: string;
+  startedAt: string;
+  format: LogFormat;
+  filter: string;
+  rowCount: number;
+  status: JobStatus;
+  filename?: string;
+  errorMsg?: string;
+  retries: number;
+  durationMs?: number;
+}
+
+// Seeded job history to show the previous permission-denied failure
+const INITIAL_JOBS: ExportJob[] = [
+  {
+    id: "job-001",
+    startedAt: "2025-05-20 14:15:02",
+    format: "csv",
+    filter: "all",
+    rowCount: 15,
+    status: "failed",
+    errorMsg: "Export failed: permission denied. The export role may have been revoked. Contact your workspace admin or retry after re-authenticating.",
+    retries: 2,
+  },
+  {
+    id: "job-000",
+    startedAt: "2025-05-20 11:59:03",
+    format: "json",
+    filter: "error",
+    rowCount: 2,
+    status: "completed",
+    filename: "lumiglow-logs-2025-05-20-error.json",
+    retries: 0,
+    durationMs: 820,
+  },
+];
 
 function LogExportPanel() {
   const [levelFilter, setLevelFilter] = useState<LogLevel | "all">("all");
   const [format, setFormat]           = useState<LogFormat>("csv");
-  const [exporting, setExporting]     = useState(false);
-  const [exported, setExported]       = useState(false);
+  const [jobStatus, setJobStatus]     = useState<JobStatus | null>(null);
+  const [jobs, setJobs]               = useState<ExportJob[]>(INITIAL_JOBS);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(true);
 
   const filtered = LOG_ENTRIES.filter(l => levelFilter === "all" || l.level === levelFilter);
 
-  function buildBlob(): Blob {
-    if (format === "json") {
-      return new Blob([JSON.stringify(filtered, null, 2)], { type: "application/json" });
+  function buildBlob(entries: LogEntry[], fmt: LogFormat): Blob {
+    if (fmt === "json") {
+      return new Blob([JSON.stringify(entries, null, 2)], { type: "application/json" });
     }
-    if (format === "csv") {
+    if (fmt === "csv") {
       const header = "id,timestamp,level,source,message,user";
-      const rows = filtered.map(l =>
+      const rows = entries.map(l =>
         [l.id, l.ts, l.level, l.source, `"${l.message.replace(/"/g, '""')}"`, l.user ?? ""].join(",")
       );
       return new Blob([[header, ...rows].join("\n")], { type: "text/csv" });
     }
-    // txt
-    const lines = filtered.map(l => `[${l.ts}] [${l.level.toUpperCase().padEnd(7)}] ${l.source}: ${l.message}${l.user ? ` (${l.user})` : ""}`);
+    const lines = entries.map(l =>
+      `[${l.ts}] [${l.level.toUpperCase().padEnd(7)}] ${l.source}: ${l.message}${l.user ? ` (${l.user})` : ""}`
+    );
     return new Blob([lines.join("\n")], { type: "text/plain" });
   }
 
-  function handleExport() {
-    setExporting(true);
+  function runExport(jobId: string, retryCount: number, snap: LogEntry[], fmt: LogFormat, filterLabel: string) {
+    const t0 = Date.now();
+    setJobStatus("running");
+    setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: "running" } : j));
+
     setTimeout(() => {
-      const blob = buildBlob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `lumiglow-logs-${new Date().toISOString().slice(0, 10)}.${format}`;
-      a.click();
-      URL.revokeObjectURL(url);
-      setExporting(false);
-      setExported(true);
-      setTimeout(() => setExported(false), 2500);
-    }, 900);
+      const elapsed = Date.now() - t0;
+      const filename = `lumiglow-logs-${new Date().toISOString().slice(0, 10)}${filterLabel !== "all" ? `-${filterLabel}` : ""}.${fmt}`;
+
+      try {
+        const blob = buildBlob(snap, fmt);
+        if (blob.size === 0) throw new Error("Export produced an empty artifact — no rows matched the selected filter.");
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        setJobStatus("completed");
+        setJobs(prev => prev.map(j =>
+          j.id === jobId
+            ? { ...j, status: "completed", filename, durationMs: elapsed, rowCount: snap.length }
+            : j
+        ));
+        setTimeout(() => setJobStatus(null), 3500);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown export error.";
+        setJobStatus("failed");
+        setJobs(prev => prev.map(j =>
+          j.id === jobId
+            ? { ...j, status: "failed", errorMsg: msg + " Please retry or contact support if the issue persists.", retries: retryCount, durationMs: elapsed }
+            : j
+        ));
+      }
+    }, 1200);
+  }
+
+  function handleExport() {
+    if (filtered.length === 0) return;
+    const jobId = `job-${Date.now()}`;
+    const now = new Date().toISOString().replace("T", " ").slice(0, 19);
+    const newJob: ExportJob = {
+      id: jobId,
+      startedAt: now,
+      format,
+      filter: levelFilter,
+      rowCount: filtered.length,
+      status: "queued",
+      retries: 0,
+    };
+    setJobs(prev => [newJob, ...prev]);
+    setActiveJobId(jobId);
+    setJobStatus("queued");
+    setShowHistory(true);
+    // Transition queued → running after a short tick
+    setTimeout(() => runExport(jobId, 0, filtered, format, levelFilter), 300);
+  }
+
+  function handleRetry(job: ExportJob) {
+    const retryCount = job.retries + 1;
+    const now = new Date().toISOString().replace("T", " ").slice(0, 19);
+    // Reset job state to queued
+    setJobs(prev => prev.map(j =>
+      j.id === job.id ? { ...j, status: "queued", errorMsg: undefined, startedAt: now, retries: retryCount } : j
+    ));
+    setActiveJobId(job.id);
+    setJobStatus("queued");
+    const snap = LOG_ENTRIES.filter(l => job.filter === "all" || l.level === (job.filter as LogLevel));
+    setTimeout(() => runExport(job.id, retryCount, snap, job.format, job.filter), 300);
   }
 
   const levelColors: Record<LogLevel, string> = {
@@ -361,25 +459,81 @@ function LogExportPanel() {
     debug:   "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400",
   };
 
+  const jobStatusUI: Record<JobStatus, { label: string; classes: string; icon: React.ReactNode }> = {
+    queued:    { label: "Queued",     classes: "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400",           icon: <Clock size={10} /> },
+    running:   { label: "Running",    classes: "bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-400",                icon: <RefreshCw size={10} className="animate-spin" /> },
+    completed: { label: "Completed",  classes: "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400",        icon: <CheckCircle2 size={10} /> },
+    failed:    { label: "Failed",     classes: "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400",                icon: <AlertCircle size={10} /> },
+  };
+
+  const isRunning = jobStatus === "queued" || jobStatus === "running";
+  const activeJob = jobs.find(j => j.id === activeJobId);
+
   return (
     <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 shadow-sm overflow-hidden mt-6">
+
       {/* Header */}
       <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100 dark:border-slate-800">
         <FileText size={16} className="text-amber-500 shrink-0" />
         <div>
           <h2 className="text-sm font-bold text-slate-900 dark:text-white">System Log Export</h2>
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Download audit &amp; system logs in your preferred format</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Download audit &amp; system logs — jobs are tracked and retryable</p>
         </div>
-        <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400">Fixed · LUMI-504</span>
+        <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400">Reliability update</span>
       </div>
+
+      {/* Active job status banner */}
+      {activeJob && (jobStatus === "running" || jobStatus === "queued") && (
+        <div className="flex items-center gap-2.5 px-5 py-3 bg-sky-50 dark:bg-sky-500/5 border-b border-sky-100 dark:border-sky-500/20">
+          <RefreshCw size={13} className="text-sky-500 animate-spin shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-sky-800 dark:text-sky-300">
+              {jobStatus === "queued" ? "Export job queued…" : `Generating ${activeJob.rowCount}-row ${activeJob.format.toUpperCase()} export…`}
+            </p>
+            <p className="text-[11px] text-sky-600 dark:text-sky-400 mt-0.5">Job {activeJob.id} · {activeJob.filter} · started {activeJob.startedAt.slice(11)}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Completed banner */}
+      {activeJob && jobStatus === "completed" && (
+        <div className="flex items-center gap-2.5 px-5 py-3 bg-green-50 dark:bg-green-500/5 border-b border-green-100 dark:border-green-500/20">
+          <CheckCircle2 size={13} className="text-green-500 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-green-800 dark:text-green-300">Export completed — file downloaded</p>
+            <p className="text-[11px] text-green-600 dark:text-green-400 mt-0.5">{activeJob.filename} · {activeJob.rowCount} rows · {activeJob.durationMs}ms</p>
+          </div>
+        </div>
+      )}
+
+      {/* Failed banner with recovery guidance */}
+      {activeJob && jobStatus === "failed" && (
+        <div className="px-5 py-4 bg-red-50 dark:bg-red-500/5 border-b border-red-100 dark:border-red-500/20">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle size={14} className="text-red-500 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-red-800 dark:text-red-300">Export job failed</p>
+              <p className="text-[11px] text-red-600 dark:text-red-400 mt-1 leading-relaxed">{activeJob.errorMsg}</p>
+              {activeJob.retries > 0 && (
+                <p className="text-[11px] text-red-500 dark:text-red-500 mt-1">Retry attempt {activeJob.retries} failed.</p>
+              )}
+            </div>
+            <button
+              onClick={() => handleRetry(activeJob)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-500/30 transition-colors shrink-0"
+            >
+              <RefreshCw size={11} /> Retry
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex-wrap">
-        {/* Level filter */}
         <div className="flex items-center gap-1.5">
           <Filter size={12} className="text-slate-400" />
           <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Level:</span>
-          <div className="flex gap-1">
+          <div className="flex gap-1 flex-wrap">
             {(["all", "error", "warning", "info", "debug"] as const).map(lvl => (
               <button
                 key={lvl}
@@ -399,7 +553,6 @@ function LogExportPanel() {
 
         <div className="flex-1" />
 
-        {/* Format selector */}
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Format:</span>
           <select
@@ -413,22 +566,18 @@ function LogExportPanel() {
           </select>
         </div>
 
-        {/* Export button */}
         <button
           onClick={handleExport}
-          disabled={exporting || filtered.length === 0}
+          disabled={isRunning || filtered.length === 0}
           className={cn(
             "flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl transition-all disabled:opacity-60",
-            exported ? "bg-green-500 text-white" : "bg-amber-500 hover:bg-amber-400 text-white shadow"
+            "bg-amber-500 hover:bg-amber-400 text-white shadow"
           )}
         >
-          {exporting ? (
-            <><RefreshCw size={12} className="animate-spin" />Exporting…</>
-          ) : exported ? (
-            <><CheckCircle2 size={12} />Downloaded!</>
-          ) : (
-            <><Download size={12} />Export {filtered.length} logs</>
-          )}
+          {isRunning
+            ? <><RefreshCw size={12} className="animate-spin" />Working…</>
+            : <><Download size={12} />Export {filtered.length} logs</>
+          }
         </button>
       </div>
 
@@ -465,6 +614,67 @@ function LogExportPanel() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Export Job History */}
+      <div className="border-t border-slate-100 dark:border-slate-800">
+        <button
+          onClick={() => setShowHistory(h => !h)}
+          className="w-full flex items-center gap-2 px-5 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+        >
+          <Clock size={13} className="text-slate-400 shrink-0" />
+          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Export job history</span>
+          <span className="text-[11px] text-slate-400 ml-1">({jobs.length} jobs)</span>
+          <span className="ml-auto">
+            {showHistory ? <ChevronUp size={13} className="text-slate-400" /> : <ChevronDown size={13} className="text-slate-400" />}
+          </span>
+        </button>
+
+        {showHistory && (
+          <div className="px-5 pb-4 space-y-2">
+            {jobs.map(job => {
+              const ui = jobStatusUI[job.status];
+              return (
+                <div key={job.id} className={cn(
+                  "rounded-xl border p-3",
+                  job.status === "failed"
+                    ? "border-red-100 dark:border-red-500/20 bg-red-50/50 dark:bg-red-500/5"
+                    : job.status === "completed"
+                    ? "border-green-100 dark:border-green-500/20 bg-green-50/30 dark:bg-green-500/5"
+                    : "border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40"
+                )}>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold", ui.classes)}>
+                      {ui.icon} {ui.label}
+                    </span>
+                    <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">{job.id}</span>
+                    <span className="text-[11px] text-slate-400">{job.startedAt}</span>
+                    <span className="text-[11px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-1.5 py-0.5 rounded font-mono uppercase">{job.format}</span>
+                    <span className="text-[11px] text-slate-400 capitalize">filter: {job.filter}</span>
+                    {job.durationMs && <span className="text-[11px] text-slate-400">{job.durationMs}ms</span>}
+                    {job.retries > 0 && <span className="text-[11px] text-amber-600 dark:text-amber-400">{job.retries} retr{job.retries === 1 ? "y" : "ies"}</span>}
+                    <div className="flex-1" />
+                    {job.status === "failed" && (
+                      <button
+                        onClick={() => handleRetry(job)}
+                        disabled={isRunning}
+                        className="flex items-center gap-1 text-[11px] font-semibold text-red-600 dark:text-red-400 hover:text-red-500 disabled:opacity-50 transition-colors"
+                      >
+                        <RefreshCw size={10} /> Retry
+                      </button>
+                    )}
+                    {job.status === "completed" && job.filename && (
+                      <span className="text-[11px] text-green-600 dark:text-green-400 font-medium truncate max-w-[200px]">{job.filename}</span>
+                    )}
+                  </div>
+                  {job.status === "failed" && job.errorMsg && (
+                    <p className="mt-1.5 text-[11px] text-red-600 dark:text-red-400 leading-relaxed">{job.errorMsg}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
