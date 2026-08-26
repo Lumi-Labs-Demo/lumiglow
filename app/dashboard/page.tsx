@@ -9,7 +9,7 @@ import {
   TrendingDown, Activity, Users, ShieldCheck, Search,
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
   Palette, Upload, Eye, Plug, RefreshCw, ArrowLeftRight,
-  Database, Globe, Link2, AlertCircle, Clock,
+  Database, Globe, Link2, AlertCircle, Clock, Wifi, WifiOff, Timer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -17,9 +17,12 @@ import {
   buildings as initialBuildings,
   alerts as initialAlerts,
   energyData,
+  gatewayIncidents as initialGatewayIncidents,
+  gatewayMetrics,
   Building,
   Zone,
   Alert,
+  GatewayIncident,
 } from "@/lib/mockData";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -1067,6 +1070,139 @@ function IntegrationsPanel() {
   );
 }
 
+// ─── API Gateway Health Panel ─────────────────────────────────────────────────
+
+function GatewayHealthPanel({
+  incidents,
+  onSimulate,
+  simulating,
+  simStep,
+}: {
+  incidents: GatewayIncident[];
+  onSimulate: () => void;
+  simulating: boolean;
+  simStep: number;
+}) {
+  const SIM_STEPS = [
+    { label: "Request dispatched to /api/v2/zones/status", ok: true  },
+    { label: "Upstream gateway timeout detected (504)",    ok: false },
+    { label: "Retry 1/3 — waiting 200 ms back-off…",      ok: null  },
+    { label: "Retry 1/3 — upstream still slow (504)",      ok: false },
+    { label: "Retry 2/3 — waiting 400 ms back-off…",      ok: null  },
+    { label: "Retry 2/3 — response received (200 OK)",     ok: true  },
+    { label: "Request resolved in 824 ms — logged ✓",      ok: true  },
+  ];
+
+  return (
+    <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-500/20 flex items-center justify-center">
+            <Wifi size={14} className="text-green-600 dark:text-green-400" />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white">API Gateway Health</h2>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500">Timeout &amp; retry handling · LUMI-504 fix active</p>
+          </div>
+        </div>
+        <span className="flex items-center gap-1.5 text-[11px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2.5 py-1 rounded-full">
+          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+          Healthy
+        </span>
+      </div>
+
+      {/* Metrics */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+        {gatewayMetrics.map(m => (
+          <div key={m.label} className="rounded-xl bg-slate-50 dark:bg-slate-800/50 p-3 border border-slate-100 dark:border-slate-800">
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 mb-0.5">{m.label}</p>
+            <p className="text-sm font-bold text-slate-900 dark:text-white">{m.value}</p>
+            <p className="text-[10px] text-green-600 dark:text-green-400 font-medium mt-0.5">{m.delta}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Retry Simulation */}
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 p-4 mb-4">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <Timer size={13} className="text-amber-500" />
+            <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">Retry simulation</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 font-semibold">Demo</span>
+          </div>
+          <button
+            onClick={onSimulate}
+            disabled={simulating}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all",
+              simulating
+                ? "bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed"
+                : "bg-amber-500 hover:bg-amber-400 text-white shadow-sm"
+            )}
+          >
+            <RefreshCw size={11} className={simulating ? "animate-spin" : ""} />
+            {simulating ? "Running…" : "Run simulation"}
+          </button>
+        </div>
+
+        {simStep > 0 && (
+          <div className="space-y-1.5 mt-2">
+            {SIM_STEPS.slice(0, simStep).map((step, i) => (
+              <div key={i} className={cn(
+                "flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-mono",
+                step.ok === true  ? "bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400" :
+                step.ok === false ? "bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400" :
+                                    "bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400"
+              )}>
+                {step.ok === true  ? <CheckCircle2 size={11} className="shrink-0" /> :
+                 step.ok === false ? <WifiOff size={11} className="shrink-0" /> :
+                                     <RefreshCw size={11} className="shrink-0 animate-spin" />}
+                {step.label}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {simStep === 0 && (
+          <p className="text-xs text-slate-400 dark:text-slate-500">
+            Click "Run simulation" to replay a 504 error being caught, retried, and resolved by the new timeout handler.
+          </p>
+        )}
+      </div>
+
+      {/* Incident log */}
+      <div>
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">Recent 504 incidents</p>
+        <div className="space-y-1.5">
+          {incidents.slice(0, 5).map(inc => (
+            <div key={inc.id} className="flex items-center gap-3 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 text-xs">
+              {inc.resolved
+                ? <CheckCircle2 size={12} className="text-green-500 shrink-0" />
+                : <AlertCircle size={12} className="text-red-500 shrink-0" />
+              }
+              <span className="font-mono text-slate-500 dark:text-slate-400 truncate flex-1">{inc.endpoint}</span>
+              <span className="text-[10px] font-semibold text-red-500 bg-red-50 dark:bg-red-500/10 px-1.5 py-0.5 rounded">
+                504
+              </span>
+              <span className="text-[10px] text-slate-400 shrink-0">{inc.retries} retr{inc.retries === 1 ? "y" : "ies"}</span>
+              {inc.resolved && inc.resolutionMs != null && (
+                <span className="text-[10px] text-green-600 dark:text-green-400 font-medium shrink-0">
+                  ✓ {inc.resolutionMs} ms
+                </span>
+              )}
+              {!inc.resolved && (
+                <span className="text-[10px] text-red-500 font-medium shrink-0">failed</span>
+              )}
+              <span className="text-[10px] text-slate-300 dark:text-slate-600 shrink-0 hidden sm:block">{inc.ts}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 const DEFAULT_BRANDING: BrandingConfig = {
@@ -1089,6 +1225,36 @@ export default function DashboardPage() {
   );
   const [reportToast, setReportToast] = useState<string | null>(null);
   const [branding, setBranding] = useState<BrandingConfig>(DEFAULT_BRANDING);
+
+  // Gateway health state
+  const [gatewayIncidents, setGatewayIncidents] = useState(initialGatewayIncidents);
+  const [simulating, setSimulating] = useState(false);
+  const [simStep, setSimStep] = useState(0);
+
+  function runGatewaySimulation() {
+    if (simulating) return;
+    setSimulating(true);
+    setSimStep(0);
+    const delays = [300, 600, 900, 1300, 1700, 2100, 2600];
+    delays.forEach((delay, i) => {
+      setTimeout(() => {
+        setSimStep(i + 1);
+        if (i === delays.length - 1) {
+          setSimulating(false);
+          const newInc: GatewayIncident = {
+            id: `g-sim-${Date.now()}`,
+            ts: "Just now",
+            endpoint: "/api/v2/zones/status",
+            statusCode: 504,
+            retries: 2,
+            resolved: true,
+            resolutionMs: 824,
+          };
+          setGatewayIncidents(prev => [newInc, ...prev.slice(0, 4)]);
+        }
+      }, delay);
+    });
+  }
 
   // Zone interactions
   const toggleZone = useCallback((zoneId: string) => {
@@ -1386,6 +1552,14 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
+
+              {/* API Gateway Health */}
+              <GatewayHealthPanel
+                incidents={gatewayIncidents}
+                onSimulate={runGatewaySimulation}
+                simulating={simulating}
+                simStep={simStep}
+              />
             </div>
           )}
 
