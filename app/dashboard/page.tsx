@@ -181,7 +181,7 @@ function ZoneRow({ zone, onToggle, onBrightness }: {
       {/* Toggle */}
       <button
         onClick={() => onToggle(zone.id)}
-        className={cn("shrink-0 transition-colors", zone.isOn ? "text-amber-500" : "text-slate-400 dark:text-slate-600")}
+        className={cn("shrink-0 transition-colors", zone.isOn ? "text-amber-500" : "text-slate-400 dark:text-slate-500")}
         aria-label={zone.isOn ? "Turn off" : "Turn on"}
       >
         {zone.isOn ? <ToggleRight size={26} /> : <ToggleLeft size={26} />}
@@ -190,7 +190,7 @@ function ZoneRow({ zone, onToggle, onBrightness }: {
       {/* Name & meta */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className={cn("text-sm font-semibold truncate", zone.isOn ? "text-slate-900 dark:text-white" : "text-slate-400 dark:text-slate-500")}>
+          <span className={cn("text-sm font-semibold truncate", zone.isOn ? "text-slate-900 dark:text-white" : "text-slate-400 dark:text-slate-400")}>
             {zone.name}
           </span>
           <span className={cn(
@@ -202,14 +202,14 @@ function ZoneRow({ zone, onToggle, onBrightness }: {
             {zone.schedule}
           </span>
         </div>
-        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">
+        <p className="text-[11px] text-slate-400 dark:text-slate-400 mt-0.5 truncate">
           {zone.lastChangedBy} · {zone.lastChangedAt}
         </p>
       </div>
 
       {/* Brightness */}
       <div className="hidden sm:flex items-center gap-2 w-32 shrink-0">
-        <Sun size={12} className={cn("shrink-0", zone.isOn ? "text-amber-400" : "text-slate-300 dark:text-slate-600")} />
+        <Sun size={12} className={cn("shrink-0", zone.isOn ? "text-amber-400" : "text-slate-300 dark:text-slate-500")} />
         <input
           type="range"
           min={0}
@@ -219,14 +219,14 @@ function ZoneRow({ zone, onToggle, onBrightness }: {
           onChange={e => onBrightness(zone.id, Number(e.target.value))}
           className={cn("flex-1 h-1.5 rounded-full appearance-none cursor-pointer accent-amber-400", !zone.isOn && "opacity-30 cursor-not-allowed")}
         />
-        <span className={cn("text-[11px] w-7 text-right font-mono", zone.isOn ? "text-slate-600 dark:text-slate-400" : "text-slate-300 dark:text-slate-600")}>
+        <span className={cn("text-[11px] w-7 text-right font-mono", zone.isOn ? "text-slate-600 dark:text-slate-400" : "text-slate-300 dark:text-slate-500")}>
           {zone.brightness}%
         </span>
       </div>
 
       {/* Watts */}
       <div className="shrink-0 text-right">
-        <span className={cn("text-sm font-bold tabular-nums", zone.isOn ? "text-slate-800 dark:text-slate-200" : "text-slate-300 dark:text-slate-600")}>
+        <span className={cn("text-sm font-bold tabular-nums", zone.isOn ? "text-slate-800 dark:text-slate-200" : "text-slate-300 dark:text-slate-500")}>
           {zone.powerWatts}W
         </span>
       </div>
@@ -255,7 +255,7 @@ function KpiCard({ label, value, sub, icon, accent }: {
       <div>
         <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{label}</p>
         <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-0.5">{value}</p>
-        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{sub}</p>
+        <p className="text-[11px] text-slate-400 dark:text-slate-400 mt-0.5">{sub}</p>
       </div>
     </div>
   );
@@ -328,6 +328,46 @@ function SettingsPanel({
 
   return (
     <div className="max-w-2xl space-y-6">
+      {/* Workspace Setup */}
+      <div className="rounded-2xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/5 p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-base">🏢</span>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Workspace Setup</h3>
+          <span className="ml-auto text-[11px] font-semibold text-amber-700 dark:text-amber-400">2 of 4 complete</span>
+        </div>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Complete these steps to finish setting up your workspace.</p>
+        <div className="space-y-2.5">
+          {([
+            { label: "Create workspace",               done: true  },
+            { label: "Invite teammates",               done: true  },
+            { label: "Connect identity provider",      done: false },
+            { label: "Configure notification channels", done: false },
+          ] as { label: string; done: boolean }[]).map((step, i) => (
+            <div key={step.label} className="flex items-center gap-3">
+              <div className={cn(
+                "w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-[10px] font-bold border-2",
+                step.done
+                  ? "bg-green-500 border-green-500 text-white"
+                  : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-500 text-slate-500 dark:text-slate-400"
+              )}>
+                {step.done ? <CheckCircle2 size={11} /> : i + 1}
+              </div>
+              <span className={cn(
+                "text-sm",
+                step.done ? "line-through text-slate-400 dark:text-slate-500" : "text-slate-800 dark:text-slate-200 font-medium"
+              )}>
+                {step.label}
+              </span>
+              {!step.done && (
+                <button className="ml-auto text-xs font-semibold text-amber-600 dark:text-amber-400 hover:text-amber-500 transition-colors whitespace-nowrap">
+                  Set up →
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Profile */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-6 shadow-sm">
         <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-4">Profile</h3>
@@ -361,9 +401,9 @@ function SettingsPanel({
           <div key={row.label} className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800 last:border-0">
             <div>
               <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{row.label}</p>
-              <p className="text-xs text-slate-400 dark:text-slate-500">{row.sub}</p>
+              <p className="text-xs text-slate-400 dark:text-slate-400">{row.sub}</p>
             </div>
-            <button onClick={() => row.set(!row.val)} className={cn("transition-colors", row.val ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>
+            <button onClick={() => row.set(!row.val)} className={cn("transition-colors", row.val ? "text-amber-500" : "text-slate-300 dark:text-slate-500")}>
               {row.val ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
             </button>
           </div>
@@ -376,9 +416,9 @@ function SettingsPanel({
         <div className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800">
           <div>
             <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">Auto-apply schedule policies</p>
-            <p className="text-xs text-slate-400 dark:text-slate-500">System adjusts brightness automatically</p>
+            <p className="text-xs text-slate-400 dark:text-slate-400">System adjusts brightness automatically</p>
           </div>
-          <button onClick={() => setAutoPolicy(!autoPolicy)} className={cn("transition-colors", autoPolicy ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>
+          <button onClick={() => setAutoPolicy(!autoPolicy)} className={cn("transition-colors", autoPolicy ? "text-amber-500" : "text-slate-300 dark:text-slate-500")}>
             {autoPolicy ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
           </button>
         </div>
@@ -390,9 +430,9 @@ function SettingsPanel({
         <div className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800">
           <div>
             <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">Two-factor authentication</p>
-            <p className="text-xs text-slate-400 dark:text-slate-500">TOTP via authenticator app</p>
+            <p className="text-xs text-slate-400 dark:text-slate-400">TOTP via authenticator app</p>
           </div>
-          <button onClick={() => setTwoFA(!twoFA)} className={cn("transition-colors", twoFA ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}>
+          <button onClick={() => setTwoFA(!twoFA)} className={cn("transition-colors", twoFA ? "text-amber-500" : "text-slate-300 dark:text-slate-500")}>
             {twoFA ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
           </button>
         </div>
@@ -632,7 +672,7 @@ function IntercomIntegrationCard() {
           </div>
           <div className="flex-1">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">Intercom</h3>
-            <p className="text-xs text-slate-400 dark:text-slate-500">Sync conversations &amp; customer support context</p>
+            <p className="text-xs text-slate-400 dark:text-slate-400">Sync conversations &amp; customer support context</p>
           </div>
           {icConnected ? (
             <span className="flex items-center gap-1.5 text-[11px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2.5 py-1 rounded-full">
@@ -713,11 +753,11 @@ function IntercomIntegrationCard() {
           <div key={row.label} className="flex items-center justify-between py-3.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
             <div>
               <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{row.label}</p>
-              <p className="text-xs text-slate-400 dark:text-slate-500">{row.sub}</p>
+              <p className="text-xs text-slate-400 dark:text-slate-400">{row.sub}</p>
             </div>
             <button
               onClick={() => row.set(!row.val)}
-              className={cn("transition-colors shrink-0 ml-4", row.val ? "text-blue-500" : "text-slate-300 dark:text-slate-600")}
+              className={cn("transition-colors shrink-0 ml-4", row.val ? "text-blue-500" : "text-slate-300 dark:text-slate-500")}
             >
               {row.val ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
             </button>
@@ -750,17 +790,17 @@ function IntercomIntegrationCard() {
           <table className="w-full text-xs min-w-[400px]">
             <thead>
               <tr className="border-b border-slate-100 dark:border-slate-800">
-                <th className="text-left font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Intercom field</th>
-                <th className="text-center font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1 w-8">→</th>
-                <th className="text-left font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">LumiGlow field</th>
-                <th className="text-right font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Status</th>
+                <th className="text-left font-semibold text-slate-400 dark:text-slate-400 pb-2 px-1">Intercom field</th>
+                <th className="text-center font-semibold text-slate-400 dark:text-slate-400 pb-2 px-1 w-8">→</th>
+                <th className="text-left font-semibold text-slate-400 dark:text-slate-400 pb-2 px-1">LumiGlow field</th>
+                <th className="text-right font-semibold text-slate-400 dark:text-slate-400 pb-2 px-1">Status</th>
               </tr>
             </thead>
             <tbody>
               {INTERCOM_CONV_MAPPINGS.map((m, i) => (
                 <tr key={i} className="border-b border-slate-50 dark:border-slate-800/60 last:border-0">
                   <td className="py-2.5 px-1 text-slate-700 dark:text-slate-300 font-medium">{m.source}</td>
-                  <td className="py-2.5 px-1 text-center text-slate-300 dark:text-slate-600">→</td>
+                  <td className="py-2.5 px-1 text-center text-slate-300 dark:text-slate-500">→</td>
                   <td className="py-2.5 px-1 text-slate-500 dark:text-slate-400">{m.target}</td>
                   <td className="py-2.5 px-1 text-right">
                     {m.status === "synced" ? (
@@ -890,7 +930,7 @@ function IntegrationsPanel() {
           </div>
           <div className="flex-1">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">HubSpot CRM</h3>
-            <p className="text-xs text-slate-400 dark:text-slate-500">Sync contacts &amp; support tickets</p>
+            <p className="text-xs text-slate-400 dark:text-slate-400">Sync contacts &amp; support tickets</p>
           </div>
           {connected ? (
             <span className="flex items-center gap-1.5 text-[11px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2.5 py-1 rounded-full">
@@ -966,11 +1006,11 @@ function IntegrationsPanel() {
           <div key={row.label} className="flex items-center justify-between py-3.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
             <div>
               <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{row.label}</p>
-              <p className="text-xs text-slate-400 dark:text-slate-500">{row.sub}</p>
+              <p className="text-xs text-slate-400 dark:text-slate-400">{row.sub}</p>
             </div>
             <button
               onClick={() => row.set(!row.val)}
-              className={cn("transition-colors shrink-0 ml-4", row.val ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}
+              className={cn("transition-colors shrink-0 ml-4", row.val ? "text-amber-500" : "text-slate-300 dark:text-slate-500")}
             >
               {row.val ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
             </button>
@@ -1003,17 +1043,17 @@ function IntegrationsPanel() {
           <table className="w-full text-xs min-w-[400px]">
             <thead>
               <tr className="border-b border-slate-100 dark:border-slate-800">
-                <th className="text-left font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Source field</th>
-                <th className="text-center font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1 w-8">→</th>
-                <th className="text-left font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Target field</th>
-                <th className="text-right font-semibold text-slate-400 dark:text-slate-500 pb-2 px-1">Status</th>
+                <th className="text-left font-semibold text-slate-400 dark:text-slate-400 pb-2 px-1">Source field</th>
+                <th className="text-center font-semibold text-slate-400 dark:text-slate-400 pb-2 px-1 w-8">→</th>
+                <th className="text-left font-semibold text-slate-400 dark:text-slate-400 pb-2 px-1">Target field</th>
+                <th className="text-right font-semibold text-slate-400 dark:text-slate-400 pb-2 px-1">Status</th>
               </tr>
             </thead>
             <tbody>
               {FIELD_MAPPINGS.map((m, i) => (
                 <tr key={i} className="border-b border-slate-50 dark:border-slate-800/60 last:border-0">
                   <td className="py-2.5 px-1 text-slate-700 dark:text-slate-300 font-medium">{m.source}</td>
-                  <td className="py-2.5 px-1 text-center text-slate-300 dark:text-slate-600">→</td>
+                  <td className="py-2.5 px-1 text-center text-slate-300 dark:text-slate-500">→</td>
                   <td className="py-2.5 px-1 text-slate-500 dark:text-slate-400">{m.target}</td>
                   <td className="py-2.5 px-1 text-right">
                     {m.status === "synced" ? (
@@ -1214,7 +1254,7 @@ export default function DashboardPage() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">Jordan Davis</p>
-              <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">Facility Manager</p>
+              <p className="text-[10px] text-slate-400 dark:text-slate-400 truncate">Facility Manager</p>
             </div>
             <Link href="/" aria-label="Sign out" className="text-slate-400 hover:text-red-500 transition-colors">
               <LogOut size={14} />
@@ -1245,7 +1285,7 @@ export default function DashboardPage() {
 
           <div>
             <h1 className="text-sm font-bold text-slate-900 dark:text-white capitalize">{tab}</h1>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:block">
+            <p className="text-[11px] text-slate-400 dark:text-slate-400 hidden sm:block">
               {branding.tagline}
             </p>
           </div>
@@ -1321,7 +1361,7 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h2 className="text-sm font-bold text-slate-900 dark:text-white">Energy usage today</h2>
-                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">All buildings · kWh per hour</p>
+                    <p className="text-xs text-slate-400 dark:text-slate-400 mt-0.5">All buildings · kWh per hour</p>
                   </div>
                   <span className="text-xs font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/15 px-2.5 py-1 rounded-full">
                     ↓ {savings}% vs baseline
@@ -1346,7 +1386,7 @@ export default function DashboardPage() {
                         <AlertBadge severity={a.severity} />
                         <div className="flex-1 min-w-0">
                           <p className="text-xs text-slate-700 dark:text-slate-300 font-medium truncate">{a.message}</p>
-                          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{a.zone} · {a.ts}</p>
+                          <p className="text-[11px] text-slate-400 dark:text-slate-400 mt-0.5">{a.zone} · {a.ts}</p>
                         </div>
                       </div>
                     ))}
@@ -1374,7 +1414,7 @@ export default function DashboardPage() {
                           <Building2 size={15} className="text-slate-400 shrink-0" />
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{b.name}</p>
-                            <p className="text-[11px] text-slate-400 dark:text-slate-500">{b.location}</p>
+                            <p className="text-[11px] text-slate-400 dark:text-slate-400">{b.location}</p>
                           </div>
                           <div className="text-right shrink-0">
                             <p className="text-xs font-bold text-slate-800 dark:text-white">{on}/{bZones.length} on</p>
@@ -1419,7 +1459,7 @@ export default function DashboardPage() {
                   )}
                   {filteredZones.map(z => (
                     <div key={z.id}>
-                      <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-1 px-1">{z.buildingName} · {z.floorName}</p>
+                      <p className="text-[11px] text-slate-400 dark:text-slate-400 mb-1 px-1">{z.buildingName} · {z.floorName}</p>
                       <ZoneRow zone={z} onToggle={toggleZone} onBrightness={setBrightness} />
                     </div>
                   ))}
@@ -1439,7 +1479,7 @@ export default function DashboardPage() {
                         <Building2 size={18} className="text-amber-500 shrink-0" />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-bold text-slate-900 dark:text-white">{b.name}</p>
-                          <p className="text-xs text-slate-400 dark:text-slate-500">
+                          <p className="text-xs text-slate-400 dark:text-slate-400">
                             {b.location} · {b.floors.length} floor{b.floors.length > 1 ? "s" : ""}
                           </p>
                         </div>
@@ -1497,7 +1537,7 @@ export default function DashboardPage() {
                 <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-12 text-center shadow-sm">
                   <CheckCircle2 size={32} className="text-green-500 mx-auto mb-3" />
                   <p className="text-sm font-semibold text-slate-900 dark:text-white">All clear!</p>
-                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">No active alerts across your portfolio.</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-400 mt-1">No active alerts across your portfolio.</p>
                 </div>
               )}
 
@@ -1548,7 +1588,7 @@ export default function DashboardPage() {
                     "flex items-center gap-4 p-4 rounded-2xl border shadow-sm bg-white dark:bg-slate-900 transition-all",
                     scheduleActive[s.id] ? "border-slate-200 dark:border-slate-700/60" : "opacity-60 border-slate-100 dark:border-slate-800"
                   )}>
-                    <Calendar size={16} className={scheduleActive[s.id] ? "text-amber-500 shrink-0" : "text-slate-300 dark:text-slate-600 shrink-0"} />
+                    <Calendar size={16} className={scheduleActive[s.id] ? "text-amber-500 shrink-0" : "text-slate-300 dark:text-slate-500 shrink-0"} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{s.name}</p>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{s.scope} · {s.time}</p>
@@ -1561,7 +1601,7 @@ export default function DashboardPage() {
                     )}>{s.mode}</span>
                     <button
                       onClick={() => setScheduleActive(prev => ({ ...prev, [s.id]: !prev[s.id] }))}
-                      className={cn("shrink-0 transition-colors", scheduleActive[s.id] ? "text-amber-500" : "text-slate-300 dark:text-slate-600")}
+                      className={cn("shrink-0 transition-colors", scheduleActive[s.id] ? "text-amber-500" : "text-slate-300 dark:text-slate-500")}
                     >
                       {scheduleActive[s.id] ? <ToggleRight size={26} /> : <ToggleLeft size={26} />}
                     </button>
@@ -1586,7 +1626,7 @@ export default function DashboardPage() {
                   <div key={s.label} className="rounded-xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-3 shadow-sm flex items-center gap-2.5">
                     <div className="shrink-0">{s.icon}</div>
                     <div>
-                      <p className="text-[10px] text-slate-400 dark:text-slate-500">{s.label}</p>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-400">{s.label}</p>
                       <p className="text-sm font-bold text-slate-900 dark:text-white">{s.value}</p>
                     </div>
                   </div>
@@ -1597,10 +1637,10 @@ export default function DashboardPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 dark:border-slate-800">
-                      <th className="text-left text-xs font-semibold text-slate-400 dark:text-slate-500 px-5 py-3">Report</th>
-                      <th className="text-left text-xs font-semibold text-slate-400 dark:text-slate-500 px-3 py-3 hidden sm:table-cell">Scope</th>
-                      <th className="text-left text-xs font-semibold text-slate-400 dark:text-slate-500 px-3 py-3 hidden md:table-cell">Generated</th>
-                      <th className="text-left text-xs font-semibold text-slate-400 dark:text-slate-500 px-3 py-3 hidden md:table-cell">Size</th>
+                      <th className="text-left text-xs font-semibold text-slate-400 dark:text-slate-400 px-5 py-3">Report</th>
+                      <th className="text-left text-xs font-semibold text-slate-400 dark:text-slate-400 px-3 py-3 hidden sm:table-cell">Scope</th>
+                      <th className="text-left text-xs font-semibold text-slate-400 dark:text-slate-400 px-3 py-3 hidden md:table-cell">Generated</th>
+                      <th className="text-left text-xs font-semibold text-slate-400 dark:text-slate-400 px-3 py-3 hidden md:table-cell">Size</th>
                       <th className="px-5 py-3" />
                     </tr>
                   </thead>

@@ -232,9 +232,9 @@ export default function LoginPage() {
 
               {/* Divider */}
               <div className="flex items-center gap-3 mb-6">
-                <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
-                <span className="text-xs text-slate-400 font-medium">or continue with email</span>
-                <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
+                <div className="flex-1 h-px bg-slate-200 dark:bg-slate-600" />
+                <span className="text-xs text-slate-400 dark:text-slate-300 font-medium">or continue with email</span>
+                <div className="flex-1 h-px bg-slate-200 dark:bg-slate-600" />
               </div>
 
               {/* Email form */}
@@ -304,7 +304,7 @@ export default function LoginPage() {
               <p className="text-center text-xs text-slate-400 mt-6">
                 Don&apos;t have an account?{" "}
                 <a href="#" className="text-amber-500 hover:text-amber-400 font-semibold transition-colors">
-                  Request access
+                  Create workspace
                 </a>
               </p>
             </div>
