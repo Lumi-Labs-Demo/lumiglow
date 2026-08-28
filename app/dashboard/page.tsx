@@ -10,6 +10,7 @@ import {
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
   Palette, Upload, Eye, Plug, RefreshCw, ArrowLeftRight,
   Database, Globe, Link2, AlertCircle, Clock,
+  LayoutGrid, Plus, Trash2, ChevronLeft, GripVertical, Pencil,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -24,7 +25,28 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings" | "integrations";
+type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings" | "integrations" | "dashboards";
+
+type WidgetType = "energy_chart" | "kpi_overview" | "buildings_summary" | "alerts_summary" | "schedules_summary" | "reports_summary";
+
+interface DashboardWidget {
+  id: string;
+  type: WidgetType;
+}
+
+interface CustomDashboard {
+  id: string;
+  name: string;
+  widgets: DashboardWidget[];
+}
+
+interface BrandingConfig {
+  companyName: string;
+  tagline: string;
+  accentColor: string;
+  logoUrl: string;
+  logoInitials: string;
+}
 
 interface BrandingConfig {
   companyName: string;
@@ -1067,6 +1089,480 @@ function IntegrationsPanel() {
   );
 }
 
+// ─── Custom Dashboards Panel ──────────────────────────────────────────────────
+
+const WIDGET_CATALOG: { type: WidgetType; label: string; desc: string; icon: React.ReactNode; accent: string }[] = [
+  { type: "energy_chart",      label: "Energy Chart",       desc: "Hourly kWh usage vs. baseline",    icon: <Activity size={16} />,    accent: "bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400"   },
+  { type: "kpi_overview",      label: "KPI Overview",       desc: "Buildings, zones, power & savings", icon: <LayoutGrid size={16} />,  accent: "bg-sky-100 dark:bg-sky-500/20 text-sky-600 dark:text-sky-400"           },
+  { type: "buildings_summary", label: "Buildings Summary",  desc: "Status for each building",          icon: <Building2 size={16} />,   accent: "bg-violet-100 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400"},
+  { type: "alerts_summary",    label: "Alerts Summary",     desc: "Active alerts at a glance",         icon: <Bell size={16} />,        accent: "bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400"           },
+  { type: "schedules_summary", label: "Schedules",          desc: "Upcoming lighting schedules",       icon: <Calendar size={16} />,    accent: "bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400"   },
+  { type: "reports_summary",   label: "Reports",            desc: "Recent generated reports",          icon: <BarChart3 size={16} />,   accent: "bg-orange-100 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400"},
+];
+
+function WidgetPreview({
+  widget,
+  buildings,
+  alertList,
+  accentColor,
+}: {
+  widget: DashboardWidget;
+  buildings: Building[];
+  alertList: Alert[];
+  accentColor: string;
+}) {
+  if (widget.type === "energy_chart") {
+    return (
+      <div>
+        <p className="text-xs font-bold text-slate-900 dark:text-white mb-3">Energy Usage Today</p>
+        <EnergyChart />
+      </div>
+    );
+  }
+
+  if (widget.type === "kpi_overview") {
+    const watts = buildings.flatMap(b => b.floors).flatMap(f => f.zones).reduce((s, z) => s + z.powerWatts, 0);
+    const on = buildings.flatMap(b => b.floors).flatMap(f => f.zones).filter(z => z.isOn).length;
+    const total = buildings.flatMap(b => b.floors).flatMap(f => f.zones).length;
+    return (
+      <div>
+        <p className="text-xs font-bold text-slate-900 dark:text-white mb-3">KPI Overview</p>
+        <div className="grid grid-cols-2 gap-3">
+          <KpiCard label="Buildings" value={String(buildings.length)} sub="All online" icon={<Building2 size={15} className="text-sky-600 dark:text-sky-400" />} accent="bg-sky-100 dark:bg-sky-500/20" />
+          <KpiCard label="Zones active" value={`${on}/${total}`} sub="Live status" icon={<Zap size={15} className="text-amber-600 dark:text-amber-400" />} accent="bg-amber-100 dark:bg-amber-500/20" />
+          <KpiCard label="Power draw" value={`${(watts / 1000).toFixed(1)} kW`} sub="Live" icon={<Activity size={15} className="text-violet-600 dark:text-violet-400" />} accent="bg-violet-100 dark:bg-violet-500/20" />
+          <KpiCard label="Savings" value="31%" sub="vs. baseline" icon={<TrendingDown size={15} className="text-green-600 dark:text-green-400" />} accent="bg-green-100 dark:bg-green-500/20" />
+        </div>
+      </div>
+    );
+  }
+
+  if (widget.type === "buildings_summary") {
+    return (
+      <div>
+        <p className="text-xs font-bold text-slate-900 dark:text-white mb-3">Buildings Summary</p>
+        <div className="space-y-2">
+          {buildings.map(b => {
+            const bZones = b.floors.flatMap(f => f.zones);
+            const on = bZones.filter(z => z.isOn).length;
+            const bWatts = bZones.reduce((s, z) => s + z.powerWatts, 0);
+            return (
+              <div key={b.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                <Building2 size={14} className="text-slate-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{b.name}</p>
+                  <p className="text-[11px] text-slate-400">{b.location}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-xs font-bold text-slate-800 dark:text-white">{on}/{bZones.length} on</p>
+                  <p className="text-[11px] text-slate-400">{(bWatts / 1000).toFixed(1)} kW</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  if (widget.type === "alerts_summary") {
+    return (
+      <div>
+        <p className="text-xs font-bold text-slate-900 dark:text-white mb-3">Alerts Summary</p>
+        {alertList.length === 0 ? (
+          <div className="text-center py-4">
+            <CheckCircle2 size={24} className="text-green-500 mx-auto mb-1" />
+            <p className="text-xs text-slate-400">All clear!</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {alertList.slice(0, 5).map(a => (
+              <div key={a.id} className="flex items-start gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                <AlertBadge severity={a.severity} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-slate-700 dark:text-slate-300 font-medium truncate">{a.message}</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">{a.zone} · {a.ts}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (widget.type === "schedules_summary") {
+    return (
+      <div>
+        <p className="text-xs font-bold text-slate-900 dark:text-white mb-3">Schedules</p>
+        <div className="space-y-2">
+          {schedules.slice(0, 4).map(s => (
+            <div key={s.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+              <Calendar size={13} className={s.active ? "text-amber-500 shrink-0" : "text-slate-300 dark:text-slate-600 shrink-0"} />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{s.name}</p>
+                <p className="text-[11px] text-slate-400 truncate">{s.time}</p>
+              </div>
+              <span className={cn(
+                "shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full",
+                s.active ? "bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-400" : "bg-slate-100 text-slate-400 dark:bg-slate-800"
+              )}>{s.active ? "active" : "off"}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (widget.type === "reports_summary") {
+    return (
+      <div>
+        <p className="text-xs font-bold text-slate-900 dark:text-white mb-3">Recent Reports</p>
+        <div className="space-y-2">
+          {reports.slice(0, 4).map(r => (
+            <div key={r.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+              <BarChart3 size={13} className="text-orange-400 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{r.name}</p>
+                <p className="text-[11px] text-slate-400">{r.generated} · {r.size}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+const DEFAULT_CUSTOM_DASHBOARDS: CustomDashboard[] = [
+  {
+    id: "cd1",
+    name: "Energy Overview",
+    widgets: [
+      { id: "w1", type: "energy_chart" },
+      { id: "w2", type: "kpi_overview" },
+      { id: "w3", type: "alerts_summary" },
+    ],
+  },
+];
+
+function CustomDashboardsPanel({
+  buildings,
+  alertList,
+  accentColor,
+}: {
+  buildings: Building[];
+  alertList: Alert[];
+  accentColor: string;
+}) {
+  const [dashboards, setDashboards] = useState<CustomDashboard[]>(DEFAULT_CUSTOM_DASHBOARDS);
+  const [activeDashboardId, setActiveDashboardId] = useState<string | null>("cd1");
+  const [showWidgetPicker, setShowWidgetPicker] = useState(false);
+  const [editingName, setEditingName] = useState<string | null>(null);
+  const [nameInput, setNameInput] = useState("");
+  const [savedToast, setSavedToast] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  const activeDashboard = dashboards.find(d => d.id === activeDashboardId) ?? null;
+
+  function createDashboard() {
+    const id = `cd${Date.now()}`;
+    const newDb: CustomDashboard = { id, name: `My Dashboard ${dashboards.length + 1}`, widgets: [] };
+    setDashboards(prev => [...prev, newDb]);
+    setActiveDashboardId(id);
+  }
+
+  function deleteDashboard(id: string) {
+    setDashboards(prev => prev.filter(d => d.id !== id));
+    if (activeDashboardId === id) {
+      const remaining = dashboards.filter(d => d.id !== id);
+      setActiveDashboardId(remaining[0]?.id ?? null);
+    }
+  }
+
+  function addWidget(type: WidgetType) {
+    if (!activeDashboard) return;
+    const id = `w${Date.now()}`;
+    setDashboards(prev => prev.map(d =>
+      d.id === activeDashboard.id
+        ? { ...d, widgets: [...d.widgets, { id, type }] }
+        : d
+    ));
+    setShowWidgetPicker(false);
+  }
+
+  function removeWidget(widgetId: string) {
+    if (!activeDashboard) return;
+    setDashboards(prev => prev.map(d =>
+      d.id === activeDashboard.id
+        ? { ...d, widgets: d.widgets.filter(w => w.id !== widgetId) }
+        : d
+    ));
+  }
+
+  function moveWidget(widgetId: string, dir: "up" | "down") {
+    if (!activeDashboard) return;
+    setDashboards(prev => prev.map(d => {
+      if (d.id !== activeDashboard.id) return d;
+      const idx = d.widgets.findIndex(w => w.id === widgetId);
+      if (idx < 0) return d;
+      const newWidgets = [...d.widgets];
+      if (dir === "up" && idx > 0) {
+        [newWidgets[idx - 1], newWidgets[idx]] = [newWidgets[idx], newWidgets[idx - 1]];
+      } else if (dir === "down" && idx < newWidgets.length - 1) {
+        [newWidgets[idx], newWidgets[idx + 1]] = [newWidgets[idx + 1], newWidgets[idx]];
+      }
+      return { ...d, widgets: newWidgets };
+    }));
+  }
+
+  function startEditName(d: CustomDashboard) {
+    setEditingName(d.id);
+    setNameInput(d.name);
+    setTimeout(() => nameInputRef.current?.focus(), 50);
+  }
+
+  function commitName() {
+    if (!editingName) return;
+    setDashboards(prev => prev.map(d =>
+      d.id === editingName ? { ...d, name: nameInput.trim() || d.name } : d
+    ));
+    setEditingName(null);
+  }
+
+  function saveDashboard() {
+    setSavedToast(true);
+    setTimeout(() => setSavedToast(false), 2000);
+  }
+
+  const accentStyle = { backgroundColor: accentColor };
+
+  return (
+    <div className="flex gap-5 h-full min-h-0">
+
+      {/* ── Sidebar: dashboard list ── */}
+      <div className="w-52 shrink-0 space-y-1">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">My Dashboards</p>
+          <button
+            onClick={createDashboard}
+            className="p-1 rounded-lg text-slate-400 hover:text-white transition-colors"
+            style={{ backgroundColor: accentColor + "22" }}
+            title="New dashboard"
+          >
+            <Plus size={13} style={{ color: accentColor }} />
+          </button>
+        </div>
+
+        {dashboards.length === 0 && (
+          <p className="text-xs text-slate-400 dark:text-slate-500 text-center py-4">No dashboards yet.<br/>Click + to create one.</p>
+        )}
+
+        {dashboards.map(d => (
+          <div
+            key={d.id}
+            className={cn(
+              "group flex items-center gap-2 px-3 py-2.5 rounded-xl cursor-pointer transition-all text-sm font-medium",
+              activeDashboardId === d.id
+                ? "text-white shadow"
+                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+            )}
+            style={activeDashboardId === d.id ? accentStyle : {}}
+            onClick={() => setActiveDashboardId(d.id)}
+          >
+            <LayoutGrid size={14} className="shrink-0" />
+            {editingName === d.id ? (
+              <input
+                ref={nameInputRef}
+                value={nameInput}
+                onChange={e => setNameInput(e.target.value)}
+                onBlur={commitName}
+                onKeyDown={e => { if (e.key === "Enter") commitName(); if (e.key === "Escape") setEditingName(null); }}
+                className="flex-1 min-w-0 bg-transparent outline-none text-sm border-b border-white/60 pb-0.5"
+                onClick={e => e.stopPropagation()}
+              />
+            ) : (
+              <span className="flex-1 truncate">{d.name}</span>
+            )}
+            <div className={cn("flex items-center gap-1 shrink-0", activeDashboardId === d.id ? "opacity-80" : "opacity-0 group-hover:opacity-100")}>
+              <button
+                onClick={e => { e.stopPropagation(); startEditName(d); }}
+                className="p-0.5 rounded hover:opacity-70 transition-opacity"
+                title="Rename"
+              >
+                <Pencil size={11} />
+              </button>
+              {dashboards.length > 1 && (
+                <button
+                  onClick={e => { e.stopPropagation(); deleteDashboard(d.id); }}
+                  className="p-0.5 rounded hover:opacity-70 transition-opacity"
+                  title="Delete"
+                >
+                  <Trash2 size={11} />
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Main: dashboard canvas ── */}
+      <div className="flex-1 min-w-0 space-y-4">
+        {!activeDashboard ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-16 text-center">
+            <LayoutGrid size={32} className="text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+            <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">No dashboard selected</p>
+            <button
+              onClick={createDashboard}
+              className="mt-4 px-4 py-2 text-sm font-semibold text-white rounded-xl shadow"
+              style={accentStyle}
+            >
+              + Create dashboard
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Header */}
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <LayoutGrid size={16} style={{ color: accentColor }} />
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">{activeDashboard.name}</h2>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500">
+                  {activeDashboard.widgets.length} widget{activeDashboard.widgets.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowWidgetPicker(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <Plus size={12} /> Add widget
+                </button>
+                <button
+                  onClick={saveDashboard}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl transition-all text-white shadow",
+                    savedToast ? "bg-green-500" : ""
+                  )}
+                  style={savedToast ? {} : accentStyle}
+                >
+                  {savedToast ? <><CheckCircle2 size={12} /> Saved!</> : "Save layout"}
+                </button>
+              </div>
+            </div>
+
+            {/* Widget grid */}
+            {activeDashboard.widgets.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-16 text-center">
+                <Plus size={28} className="text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+                <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">No widgets yet</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Click "Add widget" to populate this dashboard.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {activeDashboard.widgets.map((widget, idx) => {
+                  const meta = WIDGET_CATALOG.find(w => w.type === widget.type);
+                  return (
+                    <div
+                      key={widget.id}
+                      className={cn(
+                        "rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 shadow-sm",
+                        widget.type === "energy_chart" || widget.type === "kpi_overview" ? "lg:col-span-2" : ""
+                      )}
+                    >
+                      {/* Widget header */}
+                      <div className="flex items-center gap-2 mb-4">
+                        <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center shrink-0", meta?.accent)}>
+                          {meta?.icon}
+                        </div>
+                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex-1">{meta?.label}</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => moveWidget(widget.id, "up")}
+                            disabled={idx === 0}
+                            className="p-1 rounded-lg text-slate-300 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-300 disabled:opacity-30 transition-colors"
+                            title="Move up"
+                          >
+                            <ChevronUp size={13} />
+                          </button>
+                          <button
+                            onClick={() => moveWidget(widget.id, "down")}
+                            disabled={idx === activeDashboard.widgets.length - 1}
+                            className="p-1 rounded-lg text-slate-300 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-300 disabled:opacity-30 transition-colors"
+                            title="Move down"
+                          >
+                            <ChevronDown size={13} />
+                          </button>
+                          <button
+                            onClick={() => removeWidget(widget.id)}
+                            className="p-1 rounded-lg text-slate-300 dark:text-slate-600 hover:text-red-500 transition-colors"
+                            title="Remove widget"
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
+                      </div>
+                      <WidgetPreview widget={widget} buildings={buildings} alertList={alertList} accentColor={accentColor} />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* ── Widget Picker Modal ── */}
+      {showWidgetPicker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setShowWidgetPicker(false)}>
+          <div
+            className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md p-6 border border-slate-200 dark:border-slate-700"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Add a widget</h3>
+              <button onClick={() => setShowWidgetPicker(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-2">
+              {WIDGET_CATALOG.map(w => {
+                const alreadyAdded = activeDashboard?.widgets.some(wi => wi.type === w.type);
+                return (
+                  <button
+                    key={w.type}
+                    onClick={() => !alreadyAdded && addWidget(w.type)}
+                    disabled={alreadyAdded}
+                    className={cn(
+                      "w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all",
+                      alreadyAdded
+                        ? "border-slate-100 dark:border-slate-800 opacity-40 cursor-not-allowed"
+                        : "border-slate-200 dark:border-slate-700 hover:border-amber-300 dark:hover:border-amber-500/50 hover:bg-amber-50 dark:hover:bg-amber-500/5 cursor-pointer"
+                    )}
+                  >
+                    <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shrink-0", w.accent)}>
+                      {w.icon}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{w.label}</p>
+                      <p className="text-xs text-slate-400 dark:text-slate-500">{w.desc}</p>
+                    </div>
+                    {alreadyAdded && (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 shrink-0">Added</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 const DEFAULT_BRANDING: BrandingConfig = {
@@ -1136,6 +1632,7 @@ export default function DashboardPage() {
 
   const navItems: { id: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: "overview",     label: "Overview",     icon: <LayoutDashboard size={17} /> },
+    { id: "dashboards",   label: "Dashboards",   icon: <LayoutGrid size={17} /> },
     { id: "buildings",    label: "Buildings",    icon: <Building2 size={17} /> },
     { id: "alerts",       label: "Alerts",       icon: <Bell size={17} />, badge: alertList.filter(a => a.severity !== "info").length },
     { id: "schedules",    label: "Schedules",    icon: <Calendar size={17} /> },
@@ -1631,6 +2128,11 @@ export default function DashboardPage() {
                 </table>
               </div>
             </div>
+          )}
+
+          {/* ── CUSTOM DASHBOARDS ── */}
+          {tab === "dashboards" && (
+            <CustomDashboardsPanel buildings={buildings} alertList={alertList} accentColor={branding.accentColor} />
           )}
 
           {/* ── INTEGRATIONS ── */}
