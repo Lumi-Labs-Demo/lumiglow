@@ -248,14 +248,17 @@ function KpiCard({ label, value, sub, icon, accent }: {
   label: string; value: string; sub: string; icon: React.ReactNode; accent: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-5 flex items-start gap-4 shadow-sm hover:shadow-md transition-shadow">
+    // Card padding: M (p-4) on mobile → L (sm:p-5) on desktop; gap M (gap-4)
+    <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-4 sm:p-5 flex items-start gap-4 shadow-sm hover:shadow-md transition-shadow">
       <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0", accent)}>
         {icon}
       </div>
-      <div>
+      <div className="min-w-0">
         <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{label}</p>
-        <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-0.5">{value}</p>
-        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{sub}</p>
+        {/* Value — S gap from label (mt-1) */}
+        <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">{value}</p>
+        {/* Sub-label — S gap from value (mt-1) */}
+        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">{sub}</p>
       </div>
     </div>
   );
@@ -338,13 +341,13 @@ function SettingsPanel({
             <p className="text-xs text-slate-500 dark:text-slate-400">jordan@acme.com · Facility Manager</p>
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Full name</label>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-2 block">Full name</label>
             <input defaultValue="Jordan Davis" className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400" />
           </div>
           <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Email</label>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-2 block">Email</label>
             <input defaultValue="jordan@acme.com" className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400" />
           </div>
         </div>
@@ -417,9 +420,9 @@ function SettingsPanel({
         </div>
 
         {/* Company name + tagline */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Company name</label>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-2 block">Company name</label>
             <input
               value={draft.companyName}
               onChange={e => setDraft(d => ({ ...d, companyName: e.target.value }))}
@@ -428,7 +431,7 @@ function SettingsPanel({
             />
           </div>
           <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Logo initials (fallback)</label>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-2 block">Logo initials (fallback)</label>
             <input
               value={draft.logoInitials}
               onChange={e => setDraft(d => ({ ...d, logoInitials: e.target.value.slice(0, 3) }))}
@@ -437,7 +440,7 @@ function SettingsPanel({
             />
           </div>
           <div className="sm:col-span-2">
-            <label className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">Tagline</label>
+            <label className="text-xs text-slate-500 dark:text-slate-400 mb-2 block">Tagline</label>
             <input
               value={draft.tagline}
               onChange={e => setDraft(d => ({ ...d, tagline: e.target.value }))}

@@ -32,6 +32,23 @@ function GoogleIcon({ size = 20 }: { size?: number }) {
   );
 }
 
+// ─── Spacing tokens (onboarding surface) ─────────────────────────────────────
+// XS  = 4px  (gap-1  / p-1)
+// S   = 8px  (gap-2  / p-2)
+// M   = 16px (gap-4  / p-4)
+// L   = 24px (gap-6  / mb-6)
+// XL  = 32px (gap-8  / p-8)
+//
+// Rules applied here:
+//   Card padding           → XL (p-8)
+//   Section gap            → L  (mb-6)
+//   Form field gap         → M+ (space-y-5)
+//   Label → input          → S  (mb-2)
+//   Helper / error text    → S  (mt-2)
+//   CTA → footer           → L  (mt-6)
+//   Card → security note   → L  (mt-6)
+// ─────────────────────────────────────────────────────────────────────────────
+
 function MicrosoftOAuthModal({
   step,
   onClose,
@@ -46,7 +63,7 @@ function MicrosoftOAuthModal({
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
 
-      {/* Modal */}
+      {/* Modal — card padding XL (p-8), internal gap L (space-y-6) */}
       <div className="relative z-10 w-full max-w-sm mx-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden">
         {/* Microsoft header bar */}
         <div className="bg-[#0078D4] px-6 py-4 flex items-center gap-3">
@@ -54,17 +71,19 @@ function MicrosoftOAuthModal({
           <span className="text-white font-semibold text-sm">Microsoft</span>
         </div>
 
-        <div className="px-6 py-8 text-center">
+        {/* Body — padding XL, gap L */}
+        <div className="px-8 py-10 text-center">
           {step === "redirecting" && (
-            <div className="space-y-4">
+            <div className="space-y-6">
               <Loader2 className="w-10 h-10 mx-auto text-[#0078D4] animate-spin" />
-              <div>
+              <div className="space-y-2">
                 <p className="font-semibold text-slate-900 dark:text-white">Redirecting to Microsoft</p>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   Connecting to Azure AD / Entra ID…
                 </p>
               </div>
-              <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 rounded-xl p-3">
+              {/* Helper text — M padding, S gap inside */}
+              <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 rounded-xl p-4">
                 <Shield size={14} className="text-green-500 shrink-0" />
                 <p className="text-xs text-slate-500 dark:text-slate-400 text-left">
                   Secure OAuth 2.0 · Redirect URI verified · State parameter active
@@ -74,15 +93,16 @@ function MicrosoftOAuthModal({
           )}
 
           {step === "authenticating" && (
-            <div className="space-y-4">
+            <div className="space-y-6">
               <Loader2 className="w-10 h-10 mx-auto text-[#0078D4] animate-spin" />
-              <div>
+              <div className="space-y-2">
                 <p className="font-semibold text-slate-900 dark:text-white">Authenticating</p>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   Exchanging authorization code for token…
                 </p>
               </div>
-              <div className="flex flex-col gap-2 text-left">
+              {/* Step checklist — consistent S gap between items */}
+              <div className="flex flex-col gap-3 text-left">
                 {[
                   { label: "Redirect URI matched", done: true },
                   { label: "Authorization code received", done: true },
@@ -102,26 +122,27 @@ function MicrosoftOAuthModal({
           )}
 
           {step === "success" && (
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div className="w-14 h-14 mx-auto rounded-full bg-green-100 dark:bg-green-500/20 flex items-center justify-center">
                 <CheckCircle2 className="w-8 h-8 text-green-500" />
               </div>
-              <div>
+              <div className="space-y-1">
                 <p className="font-semibold text-slate-900 dark:text-white">Signed in successfully</p>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   Welcome back, Jordan Davis
                 </p>
-                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                <p className="text-xs text-slate-400 dark:text-slate-500">
                   jordan@acme.com · Microsoft Entra ID
                 </p>
               </div>
-              <div className="flex items-center gap-2 bg-green-50 dark:bg-green-500/10 rounded-xl p-3">
+              {/* Helper badge — M padding, S gap */}
+              <div className="flex items-center gap-2 bg-green-50 dark:bg-green-500/10 rounded-xl p-4">
                 <Shield size={14} className="text-green-500 shrink-0" />
                 <p className="text-xs text-green-700 dark:text-green-400 text-left">
                   OAuth flow completed · Session created · Redirecting to dashboard…
                 </p>
               </div>
-              <div className="flex items-center justify-center gap-1.5">
+              <div className="flex items-center justify-center gap-2">
                 <Loader2 size={12} className="animate-spin text-slate-400" />
                 <span className="text-xs text-slate-400">Redirecting…</span>
               </div>
@@ -129,13 +150,13 @@ function MicrosoftOAuthModal({
           )}
 
           {step === "error" && (
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div className="w-14 h-14 mx-auto rounded-full bg-red-100 dark:bg-red-500/20 flex items-center justify-center">
                 <AlertCircle className="w-8 h-8 text-red-500" />
               </div>
-              <div>
+              <div className="space-y-2">
                 <p className="font-semibold text-slate-900 dark:text-white">Sign-in failed</p>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   Token exchange error: redirect_uri_mismatch
                 </p>
               </div>
@@ -197,19 +218,21 @@ export default function LoginPage() {
           <ThemeToggle />
         </div>
 
-        {/* Card */}
+        {/* Card — outer vertical padding XL (py-12), card padding XL (p-8) */}
         <div className="flex-1 flex items-center justify-center px-4 py-12">
           <div className="w-full max-w-md">
             <div className="rounded-2xl border border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-900 shadow-xl shadow-slate-900/5 dark:shadow-slate-950/50 p-8">
-              {/* Header */}
-              <div className="text-center mb-8">
+
+              {/* Header — section gap L (mb-6) */}
+              <div className="text-center mb-6">
                 <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Welcome back</h1>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1.5">
+                {/* Helper text — S gap from heading */}
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
                   Sign in to your LumiGlow account
                 </p>
               </div>
 
-              {/* SSO Buttons */}
+              {/* SSO Buttons — S gap between buttons, L gap to next section */}
               <div className="space-y-3 mb-6">
                 <button
                   onClick={handleMicrosoftSignIn}
@@ -230,17 +253,17 @@ export default function LoginPage() {
                 </button>
               </div>
 
-              {/* Divider */}
+              {/* Divider — L gap on both sides */}
               <div className="flex items-center gap-3 mb-6">
                 <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
                 <span className="text-xs text-slate-400 font-medium">or continue with email</span>
                 <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
               </div>
 
-              {/* Email form */}
-              <form onSubmit={handleEmailSignIn} className="space-y-4">
+              {/* Email form — M+ field gap (space-y-5), S label gap (mb-2), S helper gap (mt-2) */}
+              <form onSubmit={handleEmailSignIn} className="space-y-5">
                 <div>
-                  <label className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5 block">
+                  <label className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2 block">
                     Work email
                   </label>
                   <input
@@ -255,15 +278,16 @@ export default function LoginPage() {
                         : "border-slate-200 dark:border-slate-700 focus:ring-amber-400/40 focus:border-amber-400"
                     )}
                   />
+                  {/* Error helper text — S gap (mt-2) */}
                   {emailError && (
-                    <p className="text-xs text-red-500 mt-1.5 flex items-center gap-1">
+                    <p className="text-xs text-red-500 mt-2 flex items-center gap-1">
                       <AlertCircle size={11} /> {emailError}
                     </p>
                   )}
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center justify-between mb-2">
                     <label className="text-xs font-medium text-slate-600 dark:text-slate-400">
                       Password
                     </label>
@@ -292,6 +316,7 @@ export default function LoginPage() {
                   </div>
                 </div>
 
+                {/* CTA — no extra margin; space-y-5 handles the gap above */}
                 <button
                   type="submit"
                   className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-white font-semibold rounded-xl transition-all shadow-sm hover:shadow-amber-400/30 text-sm"
@@ -300,7 +325,7 @@ export default function LoginPage() {
                 </button>
               </form>
 
-              {/* Footer */}
+              {/* Footer link — L gap (mt-6) */}
               <p className="text-center text-xs text-slate-400 mt-6">
                 Don&apos;t have an account?{" "}
                 <a href="#" className="text-amber-500 hover:text-amber-400 font-semibold transition-colors">
@@ -309,8 +334,8 @@ export default function LoginPage() {
               </p>
             </div>
 
-            {/* Security note */}
-            <div className="flex items-center justify-center gap-2 mt-5">
+            {/* Security note — L gap below card (mt-6) */}
+            <div className="flex items-center justify-center gap-2 mt-6">
               <Shield size={12} className="text-slate-400" />
               <p className="text-xs text-slate-400">
                 Protected by OAuth 2.0 · SOC 2 Type II · GDPR compliant
