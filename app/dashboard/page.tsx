@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
+import CustomDashboardPanel from "@/components/CustomDashboardPanel";
 import {
   buildings as initialBuildings,
   alerts as initialAlerts,
@@ -24,7 +25,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings" | "integrations";
+type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings" | "integrations" | "custom-dashboards";
 
 interface BrandingConfig {
   companyName: string;
@@ -1140,6 +1141,7 @@ export default function DashboardPage() {
     { id: "alerts",       label: "Alerts",       icon: <Bell size={17} />, badge: alertList.filter(a => a.severity !== "info").length },
     { id: "schedules",    label: "Schedules",    icon: <Calendar size={17} /> },
     { id: "reports",      label: "Reports",      icon: <BarChart3 size={17} /> },
+    { id: "custom-dashboards",  label: "Dashboards",    icon: <SlidersHorizontal size={17} /> },
     { id: "integrations", label: "Integrations", icon: <Plug size={17} /> },
     { id: "settings",     label: "Settings",     icon: <Settings size={17} /> },
   ];
@@ -1244,7 +1246,7 @@ export default function DashboardPage() {
           </button>
 
           <div>
-            <h1 className="text-sm font-bold text-slate-900 dark:text-white capitalize">{tab}</h1>
+            <h1 className="text-sm font-bold text-slate-900 dark:text-white capitalize">{tab === "custom-dashboards" ? "Dashboards" : tab}</h1>
             <p className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:block">
               {branding.tagline}
             </p>
@@ -1632,6 +1634,9 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
+
+          {/* ── CUSTOM DASHBOARDS ── */}
+          {tab === "custom-dashboards" && <CustomDashboardPanel />}
 
           {/* ── INTEGRATIONS ── */}
           {tab === "integrations" && <IntegrationsPanel />}
