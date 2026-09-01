@@ -303,9 +303,9 @@ export default function LoginPage() {
               {/* Footer */}
               <p className="text-center text-xs text-slate-400 mt-6">
                 Don&apos;t have an account?{" "}
-                <a href="#" className="text-amber-500 hover:text-amber-400 font-semibold transition-colors">
-                  Request access
-                </a>
+                <Link href="/onboarding" className="text-amber-500 hover:text-amber-400 font-semibold transition-colors">
+                  Create a workspace
+                </Link>
               </p>
             </div>
 

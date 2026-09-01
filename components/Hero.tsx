@@ -40,10 +40,10 @@ export default function Hero({ onPreview }: { onPreview: () => void }) {
         {/* CTAs */}
         <div className="mt-10 flex flex-wrap items-center justify-center gap-4 animate-slide-up">
           <Link
-            href="/dashboard"
+            href="/onboarding"
             className="group flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-400 text-white font-semibold rounded-xl shadow-lg shadow-amber-500/25 hover:shadow-amber-400/40 transition-all"
           >
-            Go to Dashboard
+            Create your workspace
             <ArrowRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
           </Link>
           <button
