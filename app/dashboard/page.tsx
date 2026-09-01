@@ -9,10 +9,11 @@ import {
   TrendingDown, Activity, Users, ShieldCheck, Search,
   ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Menu,
   Palette, Upload, Eye, Plug, RefreshCw, ArrowLeftRight,
-  Database, Globe, Link2, AlertCircle, Clock,
+  Database, Globe, Link2, AlertCircle, Clock, Wifi,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/ThemeToggle";
+import ApiHealthPanel from "@/components/ApiHealthPanel";
 import {
   buildings as initialBuildings,
   alerts as initialAlerts,
@@ -24,7 +25,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings" | "integrations";
+type Tab = "overview" | "buildings" | "alerts" | "schedules" | "reports" | "settings" | "integrations" | "api-health";
 
 interface BrandingConfig {
   companyName: string;
@@ -1141,6 +1142,7 @@ export default function DashboardPage() {
     { id: "schedules",    label: "Schedules",    icon: <Calendar size={17} /> },
     { id: "reports",      label: "Reports",      icon: <BarChart3 size={17} /> },
     { id: "integrations", label: "Integrations", icon: <Plug size={17} /> },
+    { id: "api-health",   label: "API Health",   icon: <Wifi size={17} />, badge: 1 },
     { id: "settings",     label: "Settings",     icon: <Settings size={17} /> },
   ];
 
@@ -1635,6 +1637,9 @@ export default function DashboardPage() {
 
           {/* ── INTEGRATIONS ── */}
           {tab === "integrations" && <IntegrationsPanel />}
+
+          {/* ── API HEALTH ── */}
+          {tab === "api-health" && <ApiHealthPanel />}
 
           {/* ── SETTINGS ── */}
           {tab === "settings" && <SettingsPanel branding={branding} onBrandingChange={setBranding} />}
